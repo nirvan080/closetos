@@ -6,7 +6,7 @@
  * 3. User-customizable Cloud Backend URL (e.g. Render, Railway, Fly.io, or Cloudflare tunnel)
  */
 
-export const DEFAULT_CLOUD_API = "https://wrapping-whale-deliver-pump.trycloudflare.com";
+export const DEFAULT_CLOUD_API = "https://closetos-xo77.onrender.com";
 
 export const getApiBaseUrl = (): string => {
   if (typeof window === "undefined") return "";
