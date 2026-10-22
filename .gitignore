@@ -1,0 +1,40 @@
+# Dependencies & Virtualenvs
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Local environment & tools binaries
+.env
+.env.local
+backend/.env
+tools/cloudflared
+tools/cloudflared.tgz
+tools/node/
+tools/python/
+tools/bin/
+
+# Next.js / Vite build output
+.next/
+dist/
+out/
+.cache/
+
+# Android build outputs & local properties
+frontend/android/.gradle/
+frontend/android/app/build/
+frontend/android/build/
+frontend/android/local.properties
+*.jks
+*.keystore
+
+# Temporary and log files
+*.log
+*.apk
+backend/data/*.db
+.DS_Store
+extracted_apk/
+closetos_app_package.zip
+backend/uploads/*
+!backend/uploads/.gitkeep
