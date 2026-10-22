@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "vite",
+    "build": "vite build",
+    "start": "vite preview",
     "lint": "next lint",
     "cap:sync": "npx cap sync android",
-    "cap:build": "next build && npx cap sync android"
+    "cap:build": "vite build && npx cap sync android"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
