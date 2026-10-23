@@ -1,21 +1,23 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Sparkles,
   RefreshCw,
-  Sliders,
-  CheckCircle2,
-  Watch,
-  ShieldCheck,
   Compass,
-  ArrowRight,
-  Bookmark,
-  Share2,
+  Watch,
   Ruler,
-  Layers as LayersIcon
+  Layers as LayersIcon,
+  Copy,
+  Check,
+  Bookmark,
+  ChevronRight,
+  Flame,
+  Shirt,
+  Wind
 } from "lucide-react";
-import { Outfit, WeatherCondition, ClothingItem, MicroStylingInstruction, BodyTypeProfile } from "@/types";
+import { Outfit, WeatherCondition, BodyTypeProfile } from "@/types";
+import { GarmentVisualizer } from "./GarmentVisualizer";
 
 interface StylingStudioProps {
   outfit: Outfit | null;
@@ -35,297 +37,307 @@ export const StylingStudio: React.FC<StylingStudioProps> = ({
   const [selectedOccasion, setSelectedOccasion] = useState<string>("coding");
   const [selectedVibe, setSelectedVibe] = useState<string>("korean_minimal");
   const [selectedHardware, setSelectedHardware] = useState<string>("silver");
-  const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({});
+  const [copiedHex, setCopiedHex] = useState<string | null>(null);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [loadingTipIndex, setLoadingTipIndex] = useState(0);
+
+  const loadingTips = [
+    "Calculating 1:2 Golden Silhouette Ratio (Boxy top + Wide-leg drape)...",
+    "Synchronizing watch case metal with jacket zipper pull...",
+    "Calibrating thermal rating for Pithoragarh Himalayan climate...",
+    "Harmonizing color temperature with your skin undertone...",
+    "Validating 60-30-10 color rule across top, bottom, and footwear...",
+  ];
+
+  useEffect(() => {
+    if (!isLoading) return;
+    const interval = setInterval(() => {
+      setLoadingTipIndex((prev) => (prev + 1) % loadingTips.length);
+    }, 1800);
+    return () => clearInterval(interval);
+  }, [isLoading]);
 
   const occasions = [
-    { id: "coding", label: "Desk Work / Coding", icon: "💻", cue: "Boxy & ergonomic drape" },
-    { id: "tuition", label: "Tuition / University", icon: "🎓", cue: "Korean pleated smart-casual" },
-    { id: "market", label: "Market / Casual Outing", icon: "☕", cue: "Baggy streetwear drape" },
-    { id: "date_night", label: "Date Night / Dinner", icon: "💖", cue: "Refined quiet luxury" },
-    { id: "formal", label: "Formal / Evening", icon: "🍸", cue: "Monochrome & steel harmony" },
-    { id: "airport", label: "Airport / Travel", icon: "✈️", cue: "Breathable heavy layering" },
-    { id: "home", label: "Home Lounge", icon: "🛋️", cue: "Fleece comfort" },
+    { id: "coding", label: "Desk Work / Coding", icon: "💻" },
+    { id: "tuition", label: "Tuition / College", icon: "🎓" },
+    { id: "market", label: "Cafe & Streetwear", icon: "☕" },
+    { id: "date_night", label: "Evening & Date", icon: "🍸" },
+    { id: "casual", label: "Casual / Gym", icon: "🏃" },
   ];
 
   const aesthetics = [
-    { id: "korean_minimal", label: "Korean Minimalist", icon: "🇰🇷", cue: "Fluid drapes & pleats" },
-    { id: "streetwear", label: "Modern Streetwear", icon: "🛹", cue: "350 GSM boxy crops & deep stacks" },
-    { id: "quiet_luxury", label: "Quiet Luxury", icon: "🍸", cue: "Monochrome & gold/leather refinement" },
-    { id: "gorpcore", label: "Gorpcore Utility", icon: "⛰️", cue: "Tactical cargo & weather shells" },
-    { id: "vintage_americana", label: "Vintage Workwear", icon: "🇺🇸", cue: "Canvas chore jackets & denim" },
+    { id: "korean_minimal", label: "Korean Minimal", icon: "🇰🇷" },
+    { id: "streetwear", label: "Baggy Streetwear", icon: "🛹" },
+    { id: "quiet_luxury", label: "Quiet Luxury", icon: "💎" },
+    { id: "gorpcore", label: "Gorpcore Utility", icon: "⛰️" },
   ];
 
   const handleGenerate = () => {
-    setCompletedSteps({});
     onGenerateOutfit(selectedOccasion, selectedHardware, selectedVibe);
   };
 
-  const toggleStep = (idx: number) => {
-    setCompletedSteps((prev) => ({ ...prev, [idx]: !prev[idx] }));
-  };
-
-  const handleSaveLookbook = () => {
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2500);
+  const handleCopyHex = (hex: string) => {
+    navigator.clipboard.writeText(hex);
+    setCopiedHex(hex);
+    setTimeout(() => setCopiedHex(null), 1800);
   };
 
   return (
-    <div className="space-y-8">
-      {/* Occasion & Controls Panel */}
-      <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 animate-fade-in">
+      {/* 1. Context & Style Controls Card */}
+      <div className="glass-card rounded-3xl p-6 border border-white/10 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-white flex items-center space-x-2">
-              <Sparkles className="h-5 w-5 text-amber-400" />
-              <span>Contextual Styling Engine</span>
-            </h2>
+            <div className="flex items-center space-x-2">
+              <span className="h-8 w-8 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-black font-extrabold text-xs shadow-md">
+                AI
+              </span>
+              <h2 className="text-xl font-bold tracking-tight text-white">
+                Contextual Styling Engine
+              </h2>
+            </div>
             <p className="text-xs text-neutral-400 mt-1">
-              Conditioned on current {weather.temp_c}°C weather, your {bodyProfile.body_type.replace('_', ' ')} build, and Golden 1:2 silhouette proportions.
+              Harmonizes clothing silhouette, hardware metals, and colors based on Pithoragarh climate & personal DNA.
             </p>
           </div>
 
-          {/* Metal hardware harmony toggle */}
-          <div className="flex items-center space-x-2 bg-white/[0.04] p-1.5 rounded-xl border border-white/5 self-start md:self-auto">
-            <span className="text-[11px] font-medium text-neutral-400 px-2 flex items-center space-x-1">
-              <Watch className="h-3 w-3" />
-              <span>Metal Sync:</span>
-            </span>
-            {["silver", "gold"].map((hw) => (
-              <button
-                key={hw}
-                onClick={() => setSelectedHardware(hw)}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-lg capitalize transition-all ${
-                  selectedHardware === hw
-                    ? hw === "silver"
-                      ? "bg-slate-300 text-black shadow-sm"
-                      : "bg-amber-400 text-black shadow-sm"
-                    : "text-neutral-400 hover:text-white"
-                }`}
-              >
-                {hw}
-              </button>
-            ))}
+          <button
+            onClick={handleGenerate}
+            disabled={isLoading}
+            className="flex items-center justify-center space-x-2 px-6 py-3 rounded-2xl bg-white text-black font-extrabold text-xs hover:bg-neutral-200 transition-all shadow-lg active:scale-95 disabled:opacity-50 shrink-0"
+          >
+            <Sparkles className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            <span>{isLoading ? "Styling Ensemble..." : "Generate New Fit"}</span>
+          </button>
+        </div>
+
+        {/* Occasion Selection Pills */}
+        <div className="space-y-2">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">
+            Select Occasion / Activity
+          </label>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            {occasions.map((occ) => {
+              const active = selectedOccasion === occ.id;
+              return (
+                <button
+                  key={occ.id}
+                  onClick={() => setSelectedOccasion(occ.id)}
+                  className={`p-3 rounded-2xl border text-left transition-all flex items-center space-x-2.5 ${
+                    active
+                      ? "bg-white text-black border-white shadow-md font-bold"
+                      : "bg-white/[0.02] border-white/5 text-neutral-300 hover:bg-white/[0.05]"
+                  }`}
+                >
+                  <span className="text-lg">{occ.icon}</span>
+                  <span className="text-xs font-semibold truncate">{occ.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
-        {/* Aesthetic Vibes Selector */}
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-neutral-400 block mb-2">
-            Select Style Aesthetic Vibe
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {aesthetics.map((a) => {
-              const isSelected = selectedVibe === a.id;
-              return (
+        {/* Aesthetic Vibe & Hardware Metal Selectors */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">
+              Style Aesthetic
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {aesthetics.map((a) => (
                 <button
                   key={a.id}
                   onClick={() => setSelectedVibe(a.id)}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl border text-xs font-semibold transition-all ${
-                    isSelected
-                      ? "bg-white text-black border-white shadow-md"
-                      : "bg-white/[0.03] border-white/5 text-neutral-400 hover:bg-white/[0.06] hover:text-neutral-200"
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all flex items-center space-x-1.5 ${
+                    selectedVibe === a.id
+                      ? "bg-white text-black border-white font-bold"
+                      : "bg-white/5 border-white/5 text-neutral-300 hover:bg-white/10"
                   }`}
                 >
                   <span>{a.icon}</span>
                   <span>{a.label}</span>
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
 
-        {/* Occasion Selector Buttons */}
-        <div>
-          <label className="text-xs font-semibold uppercase tracking-wider text-neutral-400 block mb-2">
-            Select Occasion / Activity
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-            {occasions.map((occ) => {
-              const isSelected = selectedOccasion === occ.id;
-              return (
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 block">
+              Hardware Metal Harmony
+            </label>
+            <div className="flex items-center space-x-2">
+              {["silver", "gold"].map((m) => (
                 <button
-                  key={occ.id}
-                  onClick={() => setSelectedOccasion(occ.id)}
-                  className={`flex flex-col items-start p-3 rounded-xl border text-left transition-all ${
-                    isSelected
-                      ? "bg-white/10 border-white/30 text-white shadow-md ring-1 ring-white/20"
-                      : "bg-white/[0.02] border-white/5 text-neutral-400 hover:bg-white/[0.05] hover:text-neutral-200"
+                  key={m}
+                  onClick={() => setSelectedHardware(m)}
+                  className={`px-4 py-1.5 rounded-xl border text-xs font-semibold capitalize transition-all ${
+                    selectedHardware === m
+                      ? "bg-white text-black border-white font-bold"
+                      : "bg-white/5 border-white/5 text-neutral-300 hover:bg-white/10"
                   }`}
                 >
-                  <span className="text-xl mb-1">{occ.icon}</span>
-                  <span className="text-xs font-semibold text-neutral-200 leading-tight">
-                    {occ.label}
-                  </span>
+                  {m === "gold" ? "🟡 Yellow Gold" : "⚪ Polished Steel / Silver"}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
-
-        {/* Trigger Button */}
-        <div className="flex items-center justify-between pt-2">
-          <button
-            onClick={handleGenerate}
-            disabled={isLoading}
-            className="w-full sm:w-auto flex items-center justify-center space-x-2.5 rounded-xl bg-white px-6 py-3 text-sm font-bold text-black transition-all hover:bg-neutral-200 active:scale-[0.98] disabled:opacity-50 shadow-lg shadow-white/5"
-          >
-            {isLoading ? (
-              <>
-                <RefreshCw className="h-4 w-4 animate-spin" />
-                <span>Harmonizing Proportion Physics...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4 text-black" />
-                <span>Generate Proportion-Engine Outfit</span>
-              </>
-            )}
-          </button>
         </div>
       </div>
 
-      {/* Generated Outfit Canvas */}
-      {outfit && (
+      {/* 2. INTERACTIVE LOADING EXPERIENCE */}
+      {isLoading && (
+        <div className="glass-card rounded-3xl p-8 border border-amber-400/30 bg-amber-500/[0.02] flex flex-col items-center justify-center text-center space-y-4 animate-fade-in py-12">
+          <div className="relative">
+            <div className="h-14 w-14 rounded-full border-2 border-amber-400 border-t-transparent animate-spin" />
+            <Sparkles className="h-6 w-6 text-amber-400 absolute inset-0 m-auto animate-pulse" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-sm font-bold text-white tracking-wide">
+              SYNTHESIZING PROPORTIONS & COLOR SYNERGY
+            </h3>
+            <p className="text-xs text-amber-300 font-medium animate-pulse min-h-[20px]">
+              {loadingTips[loadingTipIndex]}
+            </p>
+          </div>
+          <div className="flex items-center space-x-1.5 text-[10px] text-neutral-500 font-mono">
+            <span>Thermal Index: {weather.temp_c}°C</span>
+            <span>•</span>
+            <span>Morphology: {bodyProfile.body_type}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 3. OUTFIT RESULTS CANVAS */}
+      {outfit && !isLoading && (
         <div className="space-y-6 animate-fade-in">
-          {/* Top Harmony Bar */}
-          <div className="glass-card rounded-2xl p-5 border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1">
+          {/* Main Fit Briefing Header */}
+          <div className="glass-card rounded-3xl p-6 border border-white/10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1.5 flex-1">
               <div className="flex items-center space-x-2">
-                <span className="rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-bold flex items-center space-x-1">
-                  <ShieldCheck className="h-3 w-3" />
-                  <span>{Math.round(outfit.harmony_score * 100)}% Harmony Confidence</span>
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400">
+                  {outfit.occasion} Edition • {selectedVibe.replace(/_/g, " ")}
                 </span>
-                <span className="text-xs text-neutral-400">•</span>
-                <span className="text-xs font-medium text-neutral-300 capitalize">{outfit.occasion} Edition</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/20 text-amber-300 font-bold text-[10px]">
+                  {Math.round(outfit.harmony_score * 100)}% Harmony Match
+                </span>
               </div>
-              <p className="text-sm text-neutral-200 font-medium">
+              <p className="text-sm font-bold text-white leading-relaxed">
                 {outfit.styling_notes}
               </p>
             </div>
 
             <div className="flex items-center space-x-2 shrink-0">
               <button
-                onClick={handleSaveLookbook}
-                className="flex items-center space-x-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-white/10 transition-colors"
+                onClick={() => {
+                  setSavedSuccess(true);
+                  setTimeout(() => setSavedSuccess(false), 2000);
+                }}
+                className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-neutral-200 transition-colors"
               >
-                <Bookmark className="h-3.5 w-3.5" />
-                <span>{savedSuccess ? "Saved to Book!" : "Save Fit"}</span>
+                <Bookmark className="h-3.5 w-3.5 text-neutral-400" />
+                <span>{savedSuccess ? "Saved Fit!" : "Save Look"}</span>
               </button>
               <button
                 onClick={handleGenerate}
-                className="flex items-center space-x-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-neutral-200 hover:bg-white/10 transition-colors"
+                className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-neutral-200 transition-colors"
               >
-                <RefreshCw className="h-3.5 w-3.5" />
-                <span>Shuffle Pieces</span>
+                <RefreshCw className="h-3.5 w-3.5 text-neutral-400" />
+                <span>Shuffle</span>
               </button>
             </div>
           </div>
 
-          {/* Morphological Body & Facial Shape Recommendation Callout */}
-          {outfit.morphological_analysis && (
-            <div className="glass-card rounded-2xl p-5 border border-amber-500/20 bg-amber-500/[0.03] space-y-2">
-              <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-amber-400">
-                <Ruler className="h-4 w-4" />
-                <span>Personal Morphological & Facial Shape Alignment</span>
-              </div>
-              <p className="text-xs text-neutral-300 leading-relaxed">
-                {outfit.morphological_analysis}
-              </p>
+          {/* Micro-Styling Execution Instructions Card */}
+          <div className="glass-card rounded-2xl p-5 border border-amber-500/30 bg-amber-500/[0.03] space-y-2.5">
+            <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-amber-400">
+              <Sparkles className="h-4 w-4" />
+              <span>Micro-Styling Execution Protocol ("How to Wear It")</span>
             </div>
-          )}
-
-          {/* Architectural Theory Cards (Silhouette & Hardware) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="glass-card rounded-xl p-4 border border-white/10 space-y-1.5">
-              <div className="flex items-center space-x-2 text-xs font-semibold uppercase tracking-wider text-amber-400">
-                <Compass className="h-3.5 w-3.5" />
-                <span>Silhouette & Proportion Theory</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs text-neutral-300">
+              <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                <span className="text-[10px] text-amber-300 font-bold block">1. Upper Silhouette Hem</span>
+                <p className="text-neutral-200">Fold bottom hem inward 1 inch to emphasize cropped boxy cut and elongate legs.</p>
               </div>
-              <p className="text-xs text-neutral-300 leading-relaxed">
-                {outfit.silhouette_analysis}
-              </p>
-            </div>
-
-            <div className="glass-card rounded-xl p-4 border border-white/10 space-y-1.5">
-              <div className="flex items-center space-x-2 text-xs font-semibold uppercase tracking-wider text-slate-300">
-                <Watch className="h-3.5 w-3.5" />
-                <span>Hardware & Metal Synchronization</span>
+              <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                <span className="text-[10px] text-amber-300 font-bold block">2. Wrist & Hardware Exposure</span>
+                <p className="text-neutral-200">Roll sleeve back twice on watch wrist to expose the timepiece.</p>
               </div>
-              <p className="text-xs text-neutral-300 leading-relaxed">
-                {outfit.hardware_harmony}
-              </p>
+              <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                <span className="text-[10px] text-amber-300 font-bold block">3. Hemline & Footwear Stack</span>
+                <p className="text-neutral-200">Let trousers pool naturally with single break over sneaker tongue.</p>
+              </div>
             </div>
           </div>
 
-          {/* Layering Breakdown Card */}
-          {outfit.layering_breakdown && (
-            <div className="glass-card rounded-xl p-4 border border-white/10 space-y-2">
-              <div className="flex items-center space-x-2 text-xs font-semibold uppercase tracking-wider text-neutral-300">
-                <LayersIcon className="h-3.5 w-3.5 text-blue-400" />
-                <span>Architectural Layering System</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 pt-1 text-xs">
-                {Object.entries(outfit.layering_breakdown).map(([layer, desc]) => (
-                  <div key={layer} className="p-2.5 rounded-lg bg-black/40 border border-white/5 space-y-0.5">
-                    <span className="text-[10px] uppercase font-bold text-neutral-500 block">{layer}</span>
-                    <span className="text-xs font-semibold text-white truncate block">{desc}</span>
-                  </div>
-                ))}
-              </div>
+          {/* Curated Ensemble Visual Cards (Guaranteed 100% visible with GarmentVisualizer) */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                Curated Garments ({outfit.items.length} Elements)
+              </h3>
+              <span className="text-[10px] font-mono text-neutral-500">
+                Tap color code to copy HEX
+              </span>
             </div>
-          )}
 
-          {/* Item Visual Canvas Grid */}
-          <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 mb-3">
-              Curated Garment & Accessory Ensemble ({outfit.items.length} Elements)
-            </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3.5">
               {outfit.items.map((item) => (
                 <div
                   key={item.id}
-                  className="glass-card glass-card-hover rounded-2xl p-3 border border-white/10 flex flex-col justify-between group"
+                  className="glass-card rounded-2xl p-3 border border-white/10 hover:border-white/25 transition-all flex flex-col justify-between group"
                 >
+                  {/* Category & Hardware Header */}
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 bg-white/[0.05] px-2 py-0.5 rounded-md">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 bg-white/5 px-2 py-0.5 rounded-md">
                       {item.category}
                     </span>
-                    <div className="flex items-center space-x-1">
-                      <span
-                        className="h-3 w-3 rounded-full border border-white/20 shadow-sm"
-                        style={{ backgroundColor: item.color_primary_hex }}
-                        title={item.color_family}
-                      />
-                      {item.hardware_color && item.hardware_color !== "none" && (
-                        <span
-                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                            item.hardware_color === "gold"
-                              ? "bg-amber-400/20 text-amber-300 border border-amber-400/30"
-                              : "bg-slate-300/20 text-slate-200 border border-slate-300/30"
-                          }`}
-                        >
-                          {item.hardware_color}
-                        </span>
-                      )}
-                    </div>
+                    {item.hardware_color && item.hardware_color !== "none" && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase bg-amber-400/10 text-amber-300 border border-amber-400/20">
+                        {item.hardware_color}
+                      </span>
+                    )}
                   </div>
 
-                  <div className="relative aspect-square w-full rounded-xl bg-black/40 p-2 flex items-center justify-center overflow-hidden border border-white/5 my-1">
-                    <img
-                      src={item.image_cutout_url}
-                      alt={item.sub_category}
-                      className="h-full w-full object-contain filter drop-shadow-[0_8px_16px_rgba(0,0,0,0.6)] group-hover:scale-105 transition-transform duration-300"
+                  {/* Guaranteed 100% Visible Cutout & Vector Silhouette */}
+                  <div className="relative aspect-square w-full rounded-xl bg-black/50 p-2 flex items-center justify-center border border-white/5 my-1">
+                    <GarmentVisualizer
+                      category={item.category}
+                      subCategory={item.sub_category}
+                      primaryHex={item.color_primary_hex}
+                      secondaryHex={item.color_secondary_hex}
+                      imageUrl={item.image_cutout_url}
+                      hardwareColor={item.hardware_color}
                     />
                   </div>
 
-                  <div className="mt-2 space-y-1">
-                    <h4 className="text-xs font-bold text-white capitalize leading-tight truncate">
+                  {/* Bottom Specs with Enhanced Color Code */}
+                  <div className="mt-2 space-y-1.5">
+                    <h4 className="text-xs font-bold text-white capitalize truncate">
                       {item.sub_category.replace(/_/g, " ")}
                     </h4>
-                    <div className="flex items-center justify-between text-[10px] text-neutral-400">
+
+                    {/* 1-tap Copy HEX Code */}
+                    <div
+                      onClick={() => handleCopyHex(item.color_primary_hex)}
+                      className="flex items-center justify-between px-2 py-1 rounded-lg bg-black/60 border border-white/10 hover:border-white/30 cursor-pointer transition-colors"
+                      title="Tap to copy HEX"
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <div
+                          className="h-2.5 w-2.5 rounded-full border border-white/20 shrink-0"
+                          style={{ backgroundColor: item.color_primary_hex }}
+                        />
+                        <span className="font-mono text-[10px] text-neutral-200">
+                          {copiedHex === item.color_primary_hex ? "COPIED!" : item.color_primary_hex}
+                        </span>
+                      </div>
+                      <Copy className="h-2.5 w-2.5 text-neutral-500" />
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-neutral-400 pt-0.5">
                       <span className="capitalize">{item.fit_type}</span>
-                      <span>{item.fabric_weight?.replace(/_/g, " ") || "Midweight"}</span>
+                      <span className="font-mono text-neutral-400">T:{item.thermal_rating}/5</span>
                     </div>
                   </div>
                 </div>
@@ -333,66 +345,38 @@ export const StylingStudio: React.FC<StylingStudioProps> = ({
             </div>
           </div>
 
-          {/* Micro-Styling Execution Instructions */}
-          {outfit.micro_styling && outfit.micro_styling.length > 0 && (
-            <div className="glass-card rounded-2xl p-6 border border-white/10 space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                    <span>Micro-Styling Execution Instructions</span>
-                    <span className="text-xs font-normal text-neutral-400">("How to Wear It")</span>
-                  </h3>
-                  <p className="text-xs text-neutral-400 mt-0.5">
-                    Minute cuff, hem, and tuck adjustments that elevate standard pieces into high-fashion silhouettes.
-                  </p>
-                </div>
-                <span className="text-xs text-neutral-400 font-mono">
-                  {Object.values(completedSteps).filter(Boolean).length}/{outfit.micro_styling.length} executed
-                </span>
+          {/* Theory Breakdown Matrix (Proportion + Metal + Climate) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 text-xs">
+            <div className="glass-card rounded-2xl p-4 border border-white/10 space-y-1.5">
+              <div className="flex items-center space-x-1.5 text-amber-400 font-bold uppercase text-[10px]">
+                <Compass className="h-3.5 w-3.5" />
+                <span>Silhouette Architecture</span>
               </div>
-
-              <div className="space-y-2.5">
-                {outfit.micro_styling.map((inst, idx) => {
-                  const isDone = !!completedSteps[idx];
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => toggleStep(idx)}
-                      className={`flex items-start space-x-3.5 p-3.5 rounded-xl border cursor-pointer transition-all ${
-                        isDone
-                          ? "bg-emerald-500/[0.06] border-emerald-500/20 text-neutral-300"
-                          : "bg-white/[0.03] border-white/5 hover:bg-white/[0.06] text-white"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        className={`mt-0.5 h-4 w-4 shrink-0 rounded flex items-center justify-center border transition-colors ${
-                          isDone
-                            ? "bg-emerald-500 border-emerald-400 text-black"
-                            : "border-white/20 bg-white/5"
-                        }`}
-                      >
-                        {isDone && <CheckCircle2 className="h-3 w-3 stroke-[3]" />}
-                      </button>
-                      <div className="space-y-0.5">
-                        <div className="flex items-center space-x-2">
-                          <span className={`text-xs font-bold ${isDone ? "line-through text-neutral-400" : "text-white"}`}>
-                            {inst.action}
-                          </span>
-                          <span className="rounded bg-white/10 px-1.5 py-0.2 text-[9px] font-semibold uppercase text-neutral-400">
-                            {inst.target_item}
-                          </span>
-                        </div>
-                        <p className="text-xs text-neutral-400 leading-normal">
-                          {inst.reason}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <p className="text-neutral-300 leading-relaxed">
+                {outfit.silhouette_analysis}
+              </p>
             </div>
-          )}
+
+            <div className="glass-card rounded-2xl p-4 border border-white/10 space-y-1.5">
+              <div className="flex items-center space-x-1.5 text-slate-300 font-bold uppercase text-[10px]">
+                <Watch className="h-3.5 w-3.5" />
+                <span>Metal Synchronization</span>
+              </div>
+              <p className="text-neutral-300 leading-relaxed">
+                {outfit.hardware_harmony}
+              </p>
+            </div>
+
+            <div className="glass-card rounded-2xl p-4 border border-white/10 space-y-1.5">
+              <div className="flex items-center space-x-1.5 text-emerald-400 font-bold uppercase text-[10px]">
+                <Ruler className="h-3.5 w-3.5" />
+                <span>Body Type Alignment</span>
+              </div>
+              <p className="text-neutral-300 leading-relaxed">
+                {outfit.morphological_analysis || "Proportions tailored for your athletic posture and height profile."}
+              </p>
+            </div>
+          </div>
         </div>
       )}
     </div>

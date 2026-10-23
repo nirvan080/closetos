@@ -3,18 +3,12 @@
 import React from "react";
 import {
   Sparkles,
-  Camera,
   Layers,
-  BarChart3,
-  Sliders,
-  Database,
+  Smile,
+  PlusCircle,
   CloudSun,
-  MessageSquare,
-  Watch,
-  Shuffle,
   Share2,
-  Download,
-  Smile
+  Database
 } from "lucide-react";
 import { WeatherCondition } from "@/types";
 
@@ -33,102 +27,86 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSchemaModal,
   onOpenShareModal,
 }) => {
+  // Only the 4 essential, high-impact features
   const tabs = [
-    { id: "styling", label: "Styling Studio", icon: Sparkles },
-    { id: "ai-chat", label: "AI Stylist", icon: MessageSquare },
-    { id: "face-skin", label: "Face Space", icon: Smile },
-    { id: "combinations", label: "Combinations", icon: Shuffle },
-    { id: "accessories", label: "Accessories", icon: Watch },
-    { id: "digitizer", label: "Digitizer", icon: Camera },
-    { id: "vault", label: "Closet Vault", icon: Layers },
-    { id: "gap", label: "Gap Analysis", icon: BarChart3 },
-    { id: "dna", label: "Body DNA", icon: Sliders },
+    { id: "styling", label: "Stylist", icon: Sparkles },
+    { id: "database", label: "Closet Database", icon: Layers },
+    { id: "face-skin", label: "Face & Skin DNA", icon: Smile },
+    { id: "digitizer", label: "Add Piece", icon: PlusCircle },
   ];
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-[#090a0f]/85 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* Brand */}
-        <div className="flex items-center space-x-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-neutral-200 to-neutral-400 text-black font-black text-sm tracking-wider shadow-md">
-            CO
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="font-bold tracking-tight text-white text-lg">CLOSET<span className="text-neutral-400">OS</span></span>
-              <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-medium tracking-wide text-neutral-300">
-                PROPORTION ENGINE
-              </span>
+    <>
+      {/* Top Header */}
+      <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-[#090a0f]/90 backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+          {/* Brand */}
+          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab("styling")}>
+            <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-black font-black text-sm tracking-wider shadow-lg">
+              CO
             </div>
-            <p className="text-[11px] text-neutral-400 hidden sm:block">AI Wardrobe Digitization & Silhouette Harmonizer</p>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="font-extrabold tracking-tight text-white text-base">
+                  CLOSET<span className="text-amber-400">OS</span>
+                </span>
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold tracking-widest uppercase text-neutral-300">
+                  AI ENGINE
+                </span>
+              </div>
+              <p className="text-[10px] text-neutral-400 font-medium">
+                Pithoragarh, Uttarakhand
+              </p>
+            </div>
+          </div>
+
+          {/* Desktop Nav Pills */}
+          <nav className="hidden md:flex items-center space-x-1.5 bg-white/[0.03] p-1.5 rounded-2xl border border-white/5">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                    isActive
+                      ? "bg-white text-black shadow-md scale-[1.02]"
+                      : "text-neutral-400 hover:text-white hover:bg-white/5"
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 ${isActive ? "text-black" : "text-neutral-400"}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Right Header Status Widget */}
+          <div className="flex items-center space-x-2.5">
+            {weather && (
+              <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-xs">
+                <CloudSun className="h-4 w-4 text-amber-400 shrink-0" />
+                <span className="font-bold text-white">{Math.round(weather.temp_c)}°C</span>
+                <span className="hidden sm:inline text-[11px] text-neutral-400 truncate max-w-[100px]">
+                  {weather.city?.split(",")[0] || "Pithoragarh"}
+                </span>
+              </div>
+            )}
+
+            <button
+              onClick={onOpenShareModal}
+              className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 border border-white/10 transition-colors"
+              title="Share app with friends"
+            >
+              <Share2 className="h-4 w-4" />
+            </button>
           </div>
         </div>
+      </header>
 
-        {/* Desktop Navigation */}
-        <nav className="hidden lg:flex items-center space-x-1 rounded-xl bg-white/[0.04] p-1 border border-white/5">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
-                  isActive
-                    ? "bg-white text-black shadow-sm font-semibold"
-                    : "text-neutral-400 hover:text-white hover:bg-white/[0.04]"
-                }`}
-              >
-                <Icon className={`h-3.5 w-3.5 ${isActive ? "text-black" : "text-neutral-400"}`} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Right utility items */}
-        <div className="flex items-center space-x-2.5">
-          {weather && (
-            <div className="hidden sm:flex items-center space-x-1.5 rounded-full bg-white/[0.05] border border-white/10 px-3 py-1 text-xs text-neutral-300">
-              <CloudSun className="h-3.5 w-3.5 text-amber-400" />
-              <span className="font-semibold text-white">{weather.temp_c}°C</span>
-              <span className="text-neutral-400 font-normal">| {weather.condition}</span>
-            </div>
-          )}
-
-          <button
-            onClick={onOpenSchemaModal}
-            className="flex items-center space-x-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs font-medium text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
-            title="View Supabase PostgreSQL Schema"
-          >
-            <Database className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Supabase DDL</span>
-          </button>
-
-          <button
-            onClick={onOpenShareModal}
-            className="flex items-center space-x-1.5 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1.5 text-xs font-semibold text-purple-200 transition-colors hover:bg-purple-500/20 hover:text-white"
-            title="Share ClosetOS with Friends"
-          >
-            <Share2 className="h-3.5 w-3.5 text-purple-400" />
-            <span>Share</span>
-          </button>
-
-          <a
-            href="/closetos.apk"
-            download="closetos.apk"
-            className="flex items-center space-x-1.5 rounded-lg border border-amber-500/40 bg-amber-500/15 px-2.5 py-1.5 text-xs font-bold text-amber-300 transition-colors hover:bg-amber-500/25 hover:text-white"
-            title="Download Native Android APK (1.4 MB)"
-          >
-            <Download className="h-3.5 w-3.5 text-amber-400" />
-            <span className="hidden sm:inline">Get APK</span>
-            <span className="sm:hidden">APK</span>
-          </a>
-        </div>
-      </div>
-
-      {/* Mobile/Tablet Horizontal Scroll Navigation bar */}
-      <div className="flex lg:hidden border-t border-white/5 px-2 py-1.5 overflow-x-auto space-x-1 bg-black/50 scrollbar-none">
+      {/* Mobile Bottom Navigation Bar (Super sleek native app feel) */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#090a0f]/95 backdrop-blur-2xl border-t border-white/10 px-3 py-2 flex items-center justify-around shadow-2xl">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -136,18 +114,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs shrink-0 transition-all ${
-                isActive
-                  ? "bg-white text-black font-bold shadow-sm"
-                  : "text-neutral-400 hover:text-white"
+              className={`flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all ${
+                isActive ? "text-white font-bold" : "text-neutral-500 hover:text-neutral-300"
               }`}
             >
-              <Icon className="h-3.5 w-3.5" />
-              <span>{tab.label}</span>
+              <div className={`p-1.5 rounded-xl transition-all ${isActive ? "bg-white text-black shadow-md" : "text-neutral-400"}`}>
+                <Icon className="h-4 w-4" />
+              </div>
+              <span className={`text-[10px] mt-1 ${isActive ? "text-white font-bold" : "text-neutral-500"}`}>
+                {tab.label}
+              </span>
             </button>
           );
         })}
       </div>
-    </header>
+    </>
   );
 };

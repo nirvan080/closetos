@@ -9,22 +9,18 @@
 export const DEFAULT_CLOUD_API = "https://closetos-xo77.onrender.com";
 
 export const getApiBaseUrl = (): string => {
-  if (typeof window === "undefined") return "";
-
-  // Check if running inside Capacitor Android native container
-  const isCapacitor =
-    (window as any).Capacitor !== undefined ||
-    window.location.protocol === "capacitor:" ||
-    (window.location.hostname === "localhost" && window.location.port === "");
+  if (typeof window === "undefined") return DEFAULT_CLOUD_API;
 
   const savedUrl = localStorage.getItem("closetos_backend_url");
+  if (savedUrl) return savedUrl;
 
-  if (isCapacitor) {
-    return savedUrl || DEFAULT_CLOUD_API;
+  // If developing locally on port 3000 with Vite proxy, use relative path
+  if (window.location.port === "3000") {
+    return "";
   }
 
-  // In web browser, if a custom cloud backend is explicitly set, use it; otherwise use Vite proxy
-  return savedUrl || "";
+  // Everywhere else (Native Android Capacitor, mobile phone, production): use cloud backend
+  return DEFAULT_CLOUD_API;
 };
 
 export const setApiBaseUrl = (url: string) => {
@@ -40,15 +36,17 @@ export const setApiBaseUrl = (url: string) => {
 
 export const apiFetch = (endpoint: string, options?: RequestInit): Promise<Response> => {
   const baseUrl = getApiBaseUrl();
-  const targetUrl = endpoint.startsWith("http") ? endpoint : `${baseUrl}${endpoint}`;
+  const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  const targetUrl = endpoint.startsWith("http") ? endpoint : `${baseUrl}${cleanEndpoint}`;
   return fetch(targetUrl, options);
 };
 
 export const formatImageUrl = (path: string): string => {
   if (!path) return "";
-  if (path.startsWith("http") || path.startsWith("data:") || path.startsWith("blob:")) {
+  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:") || path.startsWith("blob:")) {
     return path;
   }
-  const baseUrl = getApiBaseUrl();
-  return `${baseUrl}${path}`;
+  const baseUrl = getApiBaseUrl() || DEFAULT_CLOUD_API;
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  return `${baseUrl}${cleanPath}`;
 };
