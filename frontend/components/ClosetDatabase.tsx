@@ -28,6 +28,9 @@ import { GarmentVisualizer } from "./GarmentVisualizer";
 interface ClosetDatabaseProps {
   items: ClothingItem[];
   onDeleteItem: (id: string) => void;
+  onDeleteSelectedItems?: (ids: string[]) => void;
+  onDeleteAllItems?: () => void;
+  onResetDefaultWardrobe?: () => void;
   onBuildOutfitAround: (itemId: string) => void;
   onApplyOutfitFromMultiSelect: (outfit: Outfit) => void;
   skinUndertoneFilter?: string | null;
@@ -36,6 +39,9 @@ interface ClosetDatabaseProps {
 export const ClosetDatabase: React.FC<ClosetDatabaseProps> = ({
   items,
   onDeleteItem,
+  onDeleteSelectedItems,
+  onDeleteAllItems,
+  onResetDefaultWardrobe,
   onBuildOutfitAround,
   onApplyOutfitFromMultiSelect,
   skinUndertoneFilter,
@@ -47,6 +53,8 @@ export const ClosetDatabase: React.FC<ClosetDatabaseProps> = ({
   const [copiedHex, setCopiedHex] = useState<string | null>(null);
   const [activeItem, setActiveItem] = useState<ClothingItem | null>(null);
   const [isAnalyzingSynergy, setIsAnalyzingSynergy] = useState(false);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false);
   const [synergyResult, setSynergyResult] = useState<{
     score: number;
     silhouetteScore: string;
@@ -155,6 +163,24 @@ export const ClosetDatabase: React.FC<ClosetDatabaseProps> = ({
     onApplyOutfitFromMultiSelect(synthesizedOutfit);
   };
 
+  const handleExportJson = () => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(items, null, 2));
+    const dl = document.createElement("a");
+    dl.setAttribute("href", dataStr);
+    dl.setAttribute("download", `closetos_wardrobe_backup_${Date.now()}.json`);
+    dl.click();
+  };
+
+  const handleConfirmBatchDelete = () => {
+    if (onDeleteSelectedItems) {
+      onDeleteSelectedItems(selectedIds);
+    } else {
+      selectedIds.forEach((id) => onDeleteItem(id));
+    }
+    setSelectedIds([]);
+    setConfirmDeleteSelected(false);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Top Controls & Search Bar */}
@@ -178,7 +204,7 @@ export const ClosetDatabase: React.FC<ClosetDatabaseProps> = ({
           </div>
 
           {/* View Mode & Selection count */}
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setViewMode(viewMode === "grid" ? "table" : "grid")}
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-semibold border border-white/10 transition-colors"
@@ -201,6 +227,32 @@ export const ClosetDatabase: React.FC<ClosetDatabaseProps> = ({
               className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-semibold border border-white/10 transition-colors"
             >
               <span>{selectedIds.length === filteredItems.length && filteredItems.length > 0 ? "Deselect All" : "Select All"}</span>
+            </button>
+
+            {items.length > 0 && onDeleteAllItems && (
+              <button
+                onClick={() => setConfirmDeleteAll(true)}
+                className="px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 text-xs font-semibold border border-rose-500/20 transition-colors"
+              >
+                Delete All
+              </button>
+            )}
+
+            {items.length === 0 && onResetDefaultWardrobe && (
+              <button
+                onClick={onResetDefaultWardrobe}
+                className="px-3 py-1.5 rounded-xl bg-amber-400 text-black text-xs font-bold transition-colors"
+              >
+                Restore Default Clothes
+              </button>
+            )}
+
+            <button
+              onClick={handleExportJson}
+              className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-semibold border border-white/10 transition-colors"
+              title="Backup entire wardrobe catalog as JSON"
+            >
+              Backup JSON
             </button>
           </div>
         </div>
@@ -464,6 +516,13 @@ export const ClosetDatabase: React.FC<ClosetDatabaseProps> = ({
 
           <div className="flex items-center space-x-2 w-full sm:w-auto">
             <button
+              onClick={() => setConfirmDeleteSelected(true)}
+              className="flex items-center space-x-1 px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Delete ({selectedIds.length})</span>
+            </button>
+            <button
               onClick={() => setSelectedIds([])}
               className="px-3 py-2 rounded-xl text-neutral-400 hover:text-white text-xs font-semibold"
             >
@@ -652,6 +711,68 @@ export const ClosetDatabase: React.FC<ClosetDatabaseProps> = ({
               >
                 <Sparkles className="h-3.5 w-3.5 text-black" />
                 <span>Style Around This Piece</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BATCH DELETE CONFIRMATION MODAL */}
+      {confirmDeleteSelected && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+          <div className="glass-card max-w-sm w-full rounded-2xl p-6 border border-rose-500/30 space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center space-x-2">
+              <Trash2 className="h-5 w-5 text-rose-400" />
+              <span>Delete {selectedIds.length} Pieces?</span>
+            </h3>
+            <p className="text-xs text-neutral-300">
+              Are you sure you want to delete these {selectedIds.length} selected garments from your closet database? This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setConfirmDeleteSelected(false)}
+                className="px-4 py-2 rounded-xl text-neutral-400 hover:text-white text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmBatchDelete}
+                className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md transition-colors"
+              >
+                Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE ALL CONFIRMATION MODAL */}
+      {confirmDeleteAll && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+          <div className="glass-card max-w-sm w-full rounded-2xl p-6 border border-rose-500/30 space-y-4">
+            <h3 className="text-base font-bold text-white flex items-center space-x-2">
+              <Trash2 className="h-5 w-5 text-rose-400" />
+              <span>Delete Entire Wardrobe?</span>
+            </h3>
+            <p className="text-xs text-neutral-300">
+              Are you sure you want to delete all {items.length} garments from your database? You can restore sample clothes at any time.
+            </p>
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                onClick={() => setConfirmDeleteAll(false)}
+                className="px-4 py-2 rounded-xl text-neutral-400 hover:text-white text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (onDeleteAllItems) onDeleteAllItems();
+                  setSelectedIds([]);
+                  setConfirmDeleteAll(false);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs shadow-md transition-colors"
+              >
+                Wipe All Pieces
               </button>
             </div>
           </div>

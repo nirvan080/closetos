@@ -8,7 +8,8 @@ import {
   PlusCircle,
   CloudSun,
   Share2,
-  Database
+  MessageSquare,
+  RefreshCw
 } from "lucide-react";
 import { WeatherCondition } from "@/types";
 
@@ -18,6 +19,7 @@ interface NavbarProps {
   weather?: WeatherCondition | null;
   onOpenSchemaModal: () => void;
   onOpenShareModal: () => void;
+  backgroundStatus?: string | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -26,12 +28,13 @@ export const Navbar: React.FC<NavbarProps> = ({
   weather,
   onOpenSchemaModal,
   onOpenShareModal,
+  backgroundStatus,
 }) => {
-  // Only the 4 essential, high-impact features
   const tabs = [
     { id: "styling", label: "Stylist", icon: Sparkles },
-    { id: "database", label: "Closet Database", icon: Layers },
-    { id: "face-skin", label: "Face & Skin DNA", icon: Smile },
+    { id: "database", label: "Database", icon: Layers },
+    { id: "ai-chat", label: "AI Helper", icon: MessageSquare },
+    { id: "face-skin", label: "Face & Suit DNA", icon: Smile },
     { id: "digitizer", label: "Add Piece", icon: PlusCircle },
   ];
 
@@ -51,7 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   CLOSET<span className="text-amber-400">OS</span>
                 </span>
                 <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold tracking-widest uppercase text-neutral-300">
-                  AI ENGINE
+                  AI PROPORTION
                 </span>
               </div>
               <p className="text-[10px] text-neutral-400 font-medium">
@@ -61,7 +64,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Desktop Nav Pills */}
-          <nav className="hidden md:flex items-center space-x-1.5 bg-white/[0.03] p-1.5 rounded-2xl border border-white/5">
+          <nav className="hidden md:flex items-center space-x-1 bg-white/[0.03] p-1.5 rounded-2xl border border-white/5">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -69,7 +72,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
                     isActive
                       ? "bg-white text-black shadow-md scale-[1.02]"
                       : "text-neutral-400 hover:text-white hover:bg-white/5"
@@ -84,6 +87,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Header Status Widget */}
           <div className="flex items-center space-x-2.5">
+            {backgroundStatus && (
+              <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-semibold animate-pulse">
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                <span className="truncate max-w-[150px]">{backgroundStatus}</span>
+              </div>
+            )}
+
             {weather && (
               <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 text-xs">
                 <CloudSun className="h-4 w-4 text-amber-400 shrink-0" />
@@ -106,7 +116,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       </header>
 
       {/* Mobile Bottom Navigation Bar (Super sleek native app feel) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#090a0f]/95 backdrop-blur-2xl border-t border-white/10 px-3 py-2 flex items-center justify-around shadow-2xl">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#090a0f]/95 backdrop-blur-2xl border-t border-white/10 px-2 py-2 flex items-center justify-around shadow-2xl">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -114,14 +124,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center justify-center py-1 px-3 rounded-2xl transition-all ${
+              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition-all ${
                 isActive ? "text-white font-bold" : "text-neutral-500 hover:text-neutral-300"
               }`}
             >
               <div className={`p-1.5 rounded-xl transition-all ${isActive ? "bg-white text-black shadow-md" : "text-neutral-400"}`}>
                 <Icon className="h-4 w-4" />
               </div>
-              <span className={`text-[10px] mt-1 ${isActive ? "text-white font-bold" : "text-neutral-500"}`}>
+              <span className={`text-[9px] mt-1 ${isActive ? "text-white font-bold" : "text-neutral-500"}`}>
                 {tab.label}
               </span>
             </button>

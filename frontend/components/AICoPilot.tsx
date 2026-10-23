@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { AIConsultationResponse, BodyTypeProfile, WeatherCondition, Outfit } from "@/types";
 import { apiFetch } from "@/lib/api";
+import { GarmentVisualizer } from "./GarmentVisualizer";
 
 interface AICoPilotProps {
   bodyProfile: BodyTypeProfile;
@@ -216,13 +217,16 @@ export const AICoPilot: React.FC<AICoPilotProps> = ({
                           {msg.response.suggested_outfit.items.map((it) => (
                             <div
                               key={it.id}
-                              className="h-16 w-16 shrink-0 rounded-lg bg-neutral-900 border border-white/10 p-1 flex items-center justify-center relative group"
+                              className="h-16 w-16 shrink-0 rounded-lg bg-neutral-900 border border-white/10 p-1 flex items-center justify-center relative group overflow-hidden"
                               title={it.sub_category}
                             >
-                              <img
-                                src={it.image_cutout_url}
-                                alt={it.sub_category}
-                                className="h-full w-full object-contain filter drop-shadow"
+                              <GarmentVisualizer
+                                category={it.category}
+                                subCategory={it.sub_category}
+                                primaryHex={it.color_primary_hex}
+                                secondaryHex={it.color_secondary_hex}
+                                imageUrl={it.image_cutout_url}
+                                hardwareColor={it.hardware_color}
                               />
                             </div>
                           ))}

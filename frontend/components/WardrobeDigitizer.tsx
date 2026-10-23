@@ -13,7 +13,11 @@ import {
   RefreshCw,
   Tag,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Layers,
+  ArrowRight,
+  Check,
+  Plus
 } from "lucide-react";
 import { IngestionResult, ClothingItem } from "@/types";
 import { apiFetch } from "@/lib/api";
@@ -21,21 +25,28 @@ import { apiFetch } from "@/lib/api";
 interface WardrobeDigitizerProps {
   onItemIngested: (newItem: ClothingItem) => void;
   onNavigateToVault: () => void;
+  onStartBackgroundTask?: (name: string) => void;
 }
 
 export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
   onItemIngested,
   onNavigateToVault,
+  onStartBackgroundTask,
 }) => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewLocalUrl, setPreviewLocalUrl] = useState<string | null>(null);
+  // Single or multiple file states
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; currentName: string } | null>(null);
   const [analysisResult, setAnalysisResult] = useState<IngestionResult | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [successCount, setSuccessCount] = useState(0);
 
-  // Form states for editable fields after ingestion
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Form states for editable fields after single ingestion
   const [category, setCategory] = useState("top");
   const [subCategory, setSubCategory] = useState("boxy_hoodie");
   const [fitType, setFitType] = useState("boxy");
@@ -44,23 +55,25 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
   const [hardwareColor, setHardwareColor] = useState("silver");
   const [thermalRating, setThermalRating] = useState(3);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setSelectedFile(file);
-      setPreviewLocalUrl(URL.createObjectURL(file));
-      setAnalysisResult(null);
-      setErrorMsg(null);
-    }
+  const handleFilesSelected = (filesList: FileList | null) => {
+    if (!filesList || filesList.length === 0) return;
+    const files = Array.from(filesList);
+    setSelectedFiles(files);
+    setPreviewUrls(files.map((f) => URL.createObjectURL(f)));
+    setAnalysisResult(null);
+    setErrorMsg(null);
+    setSuccessCount(0);
   };
 
-  const handleProcessImage = async () => {
-    if (!selectedFile) return;
+  // Process a single garment with manual review
+  const handleProcessSingleImage = async () => {
+    if (selectedFiles.length === 0) return;
+    const file = selectedFiles[0];
     setIsProcessing(true);
     setErrorMsg(null);
 
     const formData = new FormData();
-    formData.append("file", selectedFile);
+    formData.append("file", file);
 
     try {
       const res = await apiFetch("/api/v1/wardrobe/ingest", {
@@ -68,14 +81,11 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
         body: formData,
       });
 
-      if (!res.ok) {
-        throw new Error(`Ingestion failed: ${res.statusText}`);
-      }
+      if (!res.ok) throw new Error(`Ingestion failed with status ${res.status}`);
 
       const data: IngestionResult = await res.json();
       setAnalysisResult(data);
 
-      // Populate editable fields
       setCategory(data.category);
       setSubCategory(data.sub_category);
       setFitType(data.fit_type);
@@ -90,7 +100,93 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
     }
   };
 
-  const handleCommitGarment = async () => {
+  // Process multiple garments in batch background queue
+  const handleProcessBatch = async () => {
+    if (selectedFiles.length === 0) return;
+    setIsProcessing(true);
+    setErrorMsg(null);
+    let completed = 0;
+
+    if (onStartBackgroundTask) {
+      onStartBackgroundTask(`Digitizing ${selectedFiles.length} garments in background`);
+    }
+
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i];
+      setBatchProgress({
+        current: i + 1,
+        total: selectedFiles.length,
+        currentName: file.name,
+      });
+
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const res = await apiFetch("/api/v1/wardrobe/ingest", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (res.ok) {
+          const data: IngestionResult = await res.json();
+
+          // Auto-commit item
+          const payload = {
+            category: data.category,
+            sub_category: data.sub_category,
+            color_primary_hex: data.color_primary_hex,
+            color_secondary_hex: data.color_secondary_hex,
+            color_family: data.color_family,
+            fabric_type: data.fabric_type,
+            fabric_weight: data.fabric_weight,
+            pattern: data.pattern,
+            hardware_color: data.hardware_color,
+            thermal_rating: data.thermal_rating,
+            fit_type: data.fit_type,
+            image_original_url: data.original_url,
+            image_cutout_url: data.cutout_url,
+            embedding: [],
+            metadata_json: {
+              tags: data.tags,
+              confidence: data.confidence,
+              white_balance_applied: data.white_balance_applied,
+              bg_removed: data.bg_removed,
+            },
+          };
+
+          const saveRes = await apiFetch("/api/v1/wardrobe/items", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (saveRes.ok) {
+            const savedItem: ClothingItem = await saveRes.json();
+            onItemIngested(savedItem);
+            completed++;
+          }
+        }
+      } catch (err) {
+        console.error(`Error processing batch file ${file.name}:`, err);
+      }
+    }
+
+    setIsProcessing(false);
+    setBatchProgress(null);
+    setSuccessCount(completed);
+
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 },
+    });
+
+    setSelectedFiles([]);
+    setPreviewUrls([]);
+  };
+
+  const handleCommitSingleGarment = async () => {
     if (!analysisResult) return;
     setIsSaving(true);
 
@@ -108,36 +204,35 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
       fit_type: fitType,
       image_original_url: analysisResult.original_url,
       image_cutout_url: analysisResult.cutout_url,
+      embedding: [],
       metadata_json: {
-        palette: analysisResult.color_palette,
         tags: analysisResult.tags,
+        confidence: analysisResult.confidence,
         white_balance_applied: analysisResult.white_balance_applied,
+        bg_removed: analysisResult.bg_removed,
       },
     };
 
     try {
-      const res = await apiFetch("/api/v1/wardrobe/confirm", {
+      const res = await apiFetch("/api/v1/wardrobe/items", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Failed to save garment to database.");
+      if (!res.ok) throw new Error("Failed to save item.");
 
-      const savedItem: ClothingItem = await res.json();
-      onItemIngested(savedItem);
+      const newItem: ClothingItem = await res.json();
+      onItemIngested(newItem);
 
-      // Confetti celebration
       confetti({
         particleCount: 80,
         spread: 70,
         origin: { y: 0.6 },
-        colors: ["#ffffff", "#d4af37", "#6b8e23", "#a0aec0"],
       });
 
-      // Reset
-      setSelectedFile(null);
-      setPreviewLocalUrl(null);
+      setSelectedFiles([]);
+      setPreviewUrls([]);
       setAnalysisResult(null);
     } catch (err: any) {
       setErrorMsg(err.message || "Error saving item.");
@@ -147,284 +242,328 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
   };
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto animate-fade-in pb-12">
+      {/* Hidden native inputs */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        multiple
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => handleFilesSelected(e.target.files)}
+      />
+      <input
+        type="file"
+        ref={cameraInputRef}
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => handleFilesSelected(e.target.files)}
+      />
+
       {/* Header */}
-      <div className="text-center space-y-2">
-        <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl">
-          Automated Wardrobe Digitizer
-        </h2>
-        <p className="text-sm text-neutral-400 max-w-xl mx-auto">
-          Upload any mobile garment photo. Our pipeline applies Gray World Auto-White-Balance to neutralize indoor lighting casts, isolates transparent alpha PNGs, extracts HEX swatches, and infers fabric weights.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+        <div>
+          <div className="flex items-center space-x-2.5">
+            <span className="h-8 w-8 rounded-xl bg-amber-400 flex items-center justify-center text-black font-black text-xs shadow-md">
+              ADD
+            </span>
+            <h2 className="text-xl font-bold tracking-tight text-white">
+              Wardrobe Digitizer & Multi-Piece Scanner
+            </h2>
+          </div>
+          <p className="text-xs text-neutral-400 mt-1">
+            Snap clothing with camera or upload multiple photos. Runs OpenCV Auto-White Balance, transparent cutout isolation, and AI tag extraction in the background.
+          </p>
+        </div>
+
+        <button
+          onClick={onNavigateToVault}
+          className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 text-xs font-semibold border border-white/10 transition-colors self-start sm:self-auto"
+        >
+          <span>View Database</span>
+          <ArrowRight className="h-3.5 w-3.5" />
+        </button>
       </div>
 
-      {/* Upload Zone */}
-      {!analysisResult && (
-        <div className="glass-card rounded-2xl p-8 border-2 border-dashed border-white/10 hover:border-white/20 transition-all text-center space-y-4">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept="image/*"
-            className="hidden"
-          />
+      {/* SUCCESS BANNER */}
+      {successCount > 0 && (
+        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between animate-fade-in">
+          <div className="flex items-center space-x-2 text-xs text-emerald-300 font-semibold">
+            <CheckCircle className="h-4 w-4" />
+            <span>Successfully digitized & archived {successCount} piece(s) into your Closet Database!</span>
+          </div>
+          <button
+            onClick={onNavigateToVault}
+            className="px-3 py-1.5 rounded-lg bg-emerald-500 text-black text-xs font-bold hover:bg-emerald-400"
+          >
+            Open Database
+          </button>
+        </div>
+      )}
 
-          {previewLocalUrl ? (
-            <div className="space-y-4">
-              <div className="relative mx-auto h-64 w-64 rounded-xl overflow-hidden bg-black/50 border border-white/10">
-                <img
-                  src={previewLocalUrl}
-                  alt="Selected Preview"
-                  className="h-full w-full object-contain"
-                />
+      {/* ERROR BANNER */}
+      {errorMsg && (
+        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center space-x-2 text-xs text-rose-300">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
+      {/* UPLOAD / CAMERA SELECTION ZONE (When no single item is being reviewed) */}
+      {!analysisResult && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* 1. Camera Snap Button */}
+            <div
+              onClick={() => cameraInputRef.current?.click()}
+              className="glass-card rounded-3xl p-6 border border-white/10 hover:border-amber-400/50 cursor-pointer transition-all flex flex-col items-center justify-center text-center space-y-3 group"
+            >
+              <div className="h-14 w-14 rounded-2xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
+                <Camera className="h-7 w-7" />
               </div>
-              <div className="flex items-center justify-center space-x-3">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-4 py-2 text-xs font-semibold rounded-lg bg-white/10 text-white hover:bg-white/20 transition-colors"
-                >
-                  Choose Different Photo
-                </button>
-                <button
-                  onClick={handleProcessImage}
-                  disabled={isProcessing}
-                  className="flex items-center space-x-2 px-6 py-2 text-xs font-bold rounded-lg bg-white text-black hover:bg-neutral-200 transition-colors disabled:opacity-50"
-                >
-                  {isProcessing ? (
-                    <>
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                      <span>Executing Computer Vision Pipeline...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="h-3.5 w-3.5" />
-                      <span>Run CV Auto-Balance & Cutout</span>
-                    </>
-                  )}
-                </button>
+              <div>
+                <h3 className="text-sm font-bold text-white">Snap Piece With Camera</h3>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Direct phone camera capture with automatic perspective leveling
+                </p>
               </div>
+              <span className="px-3 py-1 rounded-full bg-amber-400 text-black text-[10px] font-bold">
+                1-Tap Camera
+              </span>
             </div>
-          ) : (
+
+            {/* 2. Multi-Upload Button */}
             <div
               onClick={() => fileInputRef.current?.click()}
-              className="cursor-pointer py-10 space-y-3"
+              className="glass-card rounded-3xl p-6 border border-white/10 hover:border-white/30 cursor-pointer transition-all flex flex-col items-center justify-center text-center space-y-3 group"
             >
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.05] border border-white/10 text-neutral-300">
+              <div className="h-14 w-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-neutral-300 group-hover:scale-110 transition-transform">
                 <UploadCloud className="h-7 w-7" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">
-                  Drop garment image here, or <span className="text-neutral-400 underline">browse files</span>
-                </p>
-                <p className="text-xs text-neutral-500 mt-1">
-                  Supports JPEG, PNG, WEBP, HEIC from smartphone cameras
+                <h3 className="text-sm font-bold text-white">Select Single or Multiple Pieces</h3>
+                <p className="text-xs text-neutral-400 mt-0.5">
+                  Pick 1, 5, or 10 garment photos from gallery for batch ingestion
                 </p>
               </div>
+              <span className="px-3 py-1 rounded-full bg-white/10 text-neutral-300 text-[10px] font-bold">
+                Batch Upload
+              </span>
             </div>
-          )}
+          </div>
 
-          {errorMsg && (
-            <div className="flex items-center justify-center space-x-2 text-xs text-rose-400 bg-rose-500/10 p-2.5 rounded-lg border border-rose-500/20">
-              <AlertCircle className="h-4 w-4" />
-              <span>{errorMsg}</span>
+          {/* PREVIEW OF SELECTED FILES */}
+          {selectedFiles.length > 0 && (
+            <div className="glass-card rounded-3xl p-6 border border-white/10 space-y-4 animate-fade-in">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    {selectedFiles.length} Garment Photo(s) Selected
+                  </h3>
+                  <p className="text-xs text-neutral-400">
+                    {selectedFiles.length === 1
+                      ? "Ready for AI cutout isolation and tag verification."
+                      : "Ready to batch digitize sequentially in the background."}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setSelectedFiles([]);
+                    setPreviewUrls([]);
+                  }}
+                  className="text-xs text-neutral-400 hover:text-white"
+                >
+                  Clear Selection
+                </button>
+              </div>
+
+              {/* Thumbnails */}
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                {previewUrls.map((url, idx) => (
+                  <div
+                    key={idx}
+                    className="relative aspect-square rounded-2xl bg-black/60 border border-white/10 overflow-hidden"
+                  >
+                    <img src={url} alt={`Garment ${idx}`} className="w-full h-full object-cover" />
+                    <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/80 text-[9px] font-mono text-white">
+                      #{idx + 1}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end space-x-3 pt-2">
+                {selectedFiles.length === 1 ? (
+                  <button
+                    onClick={handleProcessSingleImage}
+                    disabled={isProcessing}
+                    className="flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-white text-black font-bold text-xs hover:bg-neutral-200 transition-all shadow-md active:scale-95 disabled:opacity-50"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <span>Isolating Cutout...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 text-black" />
+                        <span>Process & Review Piece</span>
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleProcessBatch}
+                    disabled={isProcessing}
+                    className="flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-amber-400 text-black font-bold text-xs hover:bg-amber-300 transition-all shadow-md active:scale-95 disabled:opacity-50"
+                  >
+                    {isProcessing ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <span>
+                          {batchProgress
+                            ? `Digitizing ${batchProgress.current}/${batchProgress.total}...`
+                            : "Batch Digitizing..."}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4 text-black" />
+                        <span>Digitize All {selectedFiles.length} Pieces</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Analysis & Post-Ingestion Result Studio */}
+      {/* SINGLE ITEM REVIEW & EDIT CARD (Shows when 1 item is analyzed) */}
       {analysisResult && (
-        <div className="glass-card rounded-2xl p-6 sm:p-8 border border-white/10 space-y-8 animate-fade-in">
-          {/* Comparison Row */}
-          <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-3 flex items-center space-x-2">
-              <Eye className="h-4 w-4 text-emerald-400" />
-              <span>Pipeline Stage 1 & 2: White Balance Correction & Alpha Extraction</span>
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* White balanced */}
-              <div className="rounded-xl bg-black/40 border border-white/10 p-3 space-y-2">
-                <span className="text-[11px] font-semibold text-neutral-400">
-                  Gray World Auto-White-Balanced (Yellow Cast Neutralized)
+        <div className="glass-card rounded-3xl p-6 border border-white/10 space-y-6 animate-fade-in">
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            <div className="w-48 h-48 rounded-2xl bg-black/60 border border-white/10 p-3 flex items-center justify-center shrink-0">
+              <img
+                src={analysisResult.cutout_url}
+                alt="Cutout Preview"
+                className="max-h-full max-w-full object-contain filter drop-shadow-md"
+              />
+            </div>
+
+            <div className="flex-1 space-y-3 w-full">
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 font-bold text-[10px] uppercase">
+                  Cutout Isolated
                 </span>
-                <div className="aspect-square w-full rounded-lg overflow-hidden bg-neutral-900/50 flex items-center justify-center">
-                  <img
-                    src={analysisResult.original_url}
-                    alt="AWB Corrected"
-                    className="h-full w-full object-contain"
-                  />
-                </div>
+                <span className="text-xs text-neutral-400">
+                  Confidence: {(analysisResult.confidence * 100).toFixed(0)}%
+                </span>
               </div>
 
-              {/* Cutout */}
-              <div className="rounded-xl bg-black/40 border border-white/10 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold text-emerald-400">
-                    Transparent Alpha-Channel Cutout
+              <h3 className="text-lg font-bold text-white capitalize">
+                {subCategory.replace(/_/g, " ")}
+              </h3>
+
+              <div className="flex items-center space-x-3 text-xs">
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-neutral-400">Primary:</span>
+                  <div
+                    className="h-3.5 w-3.5 rounded-full border border-white/20"
+                    style={{ backgroundColor: analysisResult.color_primary_hex }}
+                  />
+                  <span className="font-mono text-white font-bold">
+                    {analysisResult.color_primary_hex}
                   </span>
-                  <span className="text-[10px] text-neutral-500">Checkerboard transparent back</span>
                 </div>
-                <div className="aspect-square w-full rounded-lg overflow-hidden bg-[radial-gradient(#252836_1px,transparent_1px)] [background-size:12px_12px] bg-neutral-950 flex items-center justify-center">
-                  <img
-                    src={analysisResult.cutout_url}
-                    alt="Isolated Cutout"
-                    className="h-full w-full object-contain filter drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
 
-          {/* Extracted Color Palette Swatches */}
-          <div className="p-4 rounded-xl bg-white/[0.02] border border-white/5 space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center space-x-1.5">
-                <Palette className="h-3.5 w-3.5" />
-                <span>Extracted Dominant Palette (K-Means Clustering)</span>
-              </h4>
-              <span className="text-xs font-mono font-semibold text-white uppercase bg-white/10 px-2 py-0.5 rounded">
-                Family: {analysisResult.color_family.replace(/_/g, " ")}
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-2.5">
-              {analysisResult.color_palette.map((hex, i) => (
-                <div
-                  key={i}
-                  className="flex items-center space-x-2 rounded-lg bg-black/50 border border-white/10 px-2.5 py-1.5"
-                >
-                  <span
-                    className="h-4 w-4 rounded-full border border-white/20 shadow"
-                    style={{ backgroundColor: hex }}
-                  />
-                  <span className="text-xs font-mono text-neutral-300 uppercase">{hex}</span>
-                  {i === 0 && (
-                    <span className="text-[9px] font-bold text-amber-400 uppercase bg-amber-400/10 px-1 rounded">
-                      Primary
+                {analysisResult.color_secondary_hex && (
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-neutral-400">Secondary:</span>
+                    <div
+                      className="h-3.5 w-3.5 rounded-full border border-white/20"
+                      style={{ backgroundColor: analysisResult.color_secondary_hex }}
+                    />
+                    <span className="font-mono text-white font-bold">
+                      {analysisResult.color_secondary_hex}
                     </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Editable Metadata Form */}
-          <div className="space-y-4 pt-2 border-t border-white/10">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center space-x-1.5">
-              <Tag className="h-3.5 w-3.5" />
-              <span>Stage 3: Confirm Inferred Metadata & Silhouette Attributes</span>
-            </h4>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
-              {/* Category */}
-              <div>
-                <label className="block text-neutral-400 font-medium mb-1">Category</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="w-full rounded-lg bg-neutral-900 border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-white"
-                >
-                  <option value="top">Top</option>
-                  <option value="bottom">Bottom</option>
-                  <option value="shoes">Shoes</option>
-                  <option value="outerwear">Outerwear</option>
-                  <option value="watch">Watch</option>
-                  <option value="accessory">Accessory</option>
-                </select>
-              </div>
-
-              {/* Sub-Category */}
-              <div>
-                <label className="block text-neutral-400 font-medium mb-1">Sub-Category</label>
-                <input
-                  type="text"
-                  value={subCategory}
-                  onChange={(e) => setSubCategory(e.target.value)}
-                  className="w-full rounded-lg bg-neutral-900 border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-white"
-                />
-              </div>
-
-              {/* Silhouette Cut */}
-              <div>
-                <label className="block text-neutral-400 font-medium mb-1">Silhouette Cut / Fit</label>
-                <select
-                  value={fitType}
-                  onChange={(e) => setFitType(e.target.value)}
-                  className="w-full rounded-lg bg-neutral-900 border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-white"
-                >
-                  <option value="boxy">Boxy</option>
-                  <option value="baggy">Baggy</option>
-                  <option value="korean-pleated">Korean Pleated</option>
-                  <option value="relaxed">Relaxed</option>
-                  <option value="regular">Regular</option>
-                  <option value="oversized">Oversized</option>
-                </select>
-              </div>
-
-              {/* Fabric Type */}
-              <div>
-                <label className="block text-neutral-400 font-medium mb-1">Fabric Texture</label>
-                <input
-                  type="text"
-                  value={fabricType}
-                  onChange={(e) => setFabricType(e.target.value)}
-                  className="w-full rounded-lg bg-neutral-900 border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-white"
-                />
-              </div>
-
-              {/* Fabric Weight */}
-              <div>
-                <label className="block text-neutral-400 font-medium mb-1">Fabric Weight / GSM</label>
-                <select
-                  value={fabricWeight}
-                  onChange={(e) => setFabricWeight(e.target.value)}
-                  className="w-full rounded-lg bg-neutral-900 border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-white"
-                >
-                  <option value="heavyweight_350gsm">Heavyweight (350+ GSM)</option>
-                  <option value="midweight">Midweight (220-280 GSM)</option>
-                  <option value="lightweight">Lightweight (&lt; 200 GSM)</option>
-                </select>
-              </div>
-
-              {/* Hardware Metal Color */}
-              <div>
-                <label className="block text-neutral-400 font-medium mb-1">Hardware Metal Tone</label>
-                <select
-                  value={hardwareColor}
-                  onChange={(e) => setHardwareColor(e.target.value)}
-                  className="w-full rounded-lg bg-neutral-900 border border-white/15 px-3 py-2 text-white focus:outline-none focus:border-white"
-                >
-                  <option value="none">None / Concealed</option>
-                  <option value="silver">Silver / Steel</option>
-                  <option value="gold">Gold / Brass</option>
-                </select>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center justify-between pt-4 border-t border-white/10">
+          {/* Form Fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            <div className="space-y-1">
+              <label className="text-neutral-400 font-medium">Category</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white capitalize"
+              >
+                <option value="top">Top</option>
+                <option value="bottom">Bottom</option>
+                <option value="outerwear">Outerwear</option>
+                <option value="footwear">Footwear</option>
+                <option value="accessory">Accessory</option>
+                <option value="watch">Watch</option>
+                <option value="eyewear">Eyewear</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-neutral-400 font-medium">Silhouette Fit</label>
+              <select
+                value={fitType}
+                onChange={(e) => setFitType(e.target.value)}
+                className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white capitalize"
+              >
+                <option value="boxy">Boxy Cropped (1:2)</option>
+                <option value="relaxed">Relaxed Draped</option>
+                <option value="baggy">Baggy Wide</option>
+                <option value="tailored">Tailored Slim</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-neutral-400 font-medium">Fabric Type</label>
+              <input
+                type="text"
+                value={fabricType}
+                onChange={(e) => setFabricType(e.target.value)}
+                className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-neutral-400 font-medium">Fabric Weight / GSM</label>
+              <input
+                type="text"
+                value={fabricWeight}
+                onChange={(e) => setFabricWeight(e.target.value)}
+                className="w-full rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-white"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-white/10">
             <button
               onClick={() => setAnalysisResult(null)}
-              className="text-xs text-neutral-400 hover:text-white transition-colors"
+              className="text-xs text-neutral-400 hover:text-white"
             >
-              Cancel & Discard
+              Cancel
             </button>
             <button
-              onClick={handleCommitGarment}
+              onClick={handleCommitSingleGarment}
               disabled={isSaving}
-              className="flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-white text-black font-bold text-xs hover:bg-neutral-200 active:scale-95 transition-all shadow-md"
+              className="flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-white text-black font-bold text-xs hover:bg-neutral-200 transition-all shadow-md active:scale-95 disabled:opacity-50"
             >
-              {isSaving ? (
-                <>
-                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  <span>Computing Vector Embedding...</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-3.5 w-3.5 text-black" />
-                  <span>Commit to Digital Closet</span>
-                </>
-              )}
+              <Check className="h-4 w-4" />
+              <span>{isSaving ? "Saving to Vault..." : "Confirm & Save to Closet"}</span>
             </button>
           </div>
         </div>

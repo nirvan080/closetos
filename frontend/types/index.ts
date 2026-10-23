@@ -73,6 +73,22 @@ export interface BodyTypeProfile {
   preferred_neckline?: string;
   chest_in?: number;
   waist_in?: number;
+  // Tailored Suiting Specifics
+  suit_lapel_style?: "notch" | "peak" | "shawl" | string;
+  suit_button_stance?: "2_button" | "double_breasted" | "1_button" | string;
+  suit_trouser_break?: "no_break" | "slight_break" | "full_break" | string;
+  suit_trouser_pleat?: "single_reverse_pleat" | "flat_front" | "double_pleat" | string;
+  suit_shoulder?: "natural_spalla" | "roped_structured" | "light_padding" | string;
+  suit_fabric_pref?: "worsted_wool_super120" | "flannel_heavyweight" | "linen_silk" | string;
+  suit_jacket_drop?: string; // "Drop 6", "Drop 7", "Drop 8"
+}
+
+export interface BackgroundTask {
+  id: string;
+  name: string;
+  progress: number;
+  status: "running" | "completed" | "error";
+  error?: string;
 }
 
 export interface MicroStylingInstruction {
