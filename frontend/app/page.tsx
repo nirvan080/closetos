@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Navbar } from "@/components/Navbar";
 import { WeatherWidget } from "@/components/WeatherWidget";
 import { StylingStudio } from "@/components/StylingStudio";
 import { ClosetDatabase } from "@/components/ClosetDatabase";
+import { OutfitCanvas } from "@/components/OutfitCanvas";
+import { OutfitPlannerAndPacker } from "@/components/OutfitPlannerAndPacker";
 import { AICoPilot } from "@/components/AICoPilot";
 import { FaceSkinStudio } from "@/components/FaceSkinStudio";
 import { WardrobeDigitizer } from "@/components/WardrobeDigitizer";
@@ -14,10 +16,12 @@ import {
   ClothingItem,
   Outfit,
   WeatherCondition,
-  BodyTypeProfile
+  BodyTypeProfile,
+  IngestionResult
 } from "@/types";
 import { apiFetch } from "@/lib/api";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { RefreshCw, Sparkles, CheckCircle2, ChevronUp, X } from "lucide-react";
+import confetti from "canvas-confetti";
 
 const DEFAULT_WEATHER: WeatherCondition = {
   temp_c: 13.8,
@@ -47,9 +51,17 @@ const DEFAULT_BODY_PROFILE: BodyTypeProfile = {
   suit_fabric_pref: "worsted_wool_super120",
 };
 
+interface QueueTask {
+  id: string;
+  name: string;
+  file?: File;
+  url?: string;
+  status: "pending" | "processing" | "completed" | "error";
+  thumbnail?: string;
+}
+
 export default function Home() {
   const [activeTab, setActiveTab] = useState<string>("styling");
-  const [backgroundStatus, setBackgroundStatus] = useState<string | null>(null);
 
   // Zero-Latency LocalStorage Caching for instant 0ms mobile launch
   const [items, setItems] = useState<ClothingItem[]>(() => {
@@ -89,6 +101,12 @@ export default function Home() {
   const [isGeneratingOutfit, setIsGeneratingOutfit] = useState(false);
   const [isSchemaModalOpen, setIsSchemaModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  // Global Non-Blocking Background Queue
+  const [queueTasks, setQueueTasks] = useState<QueueTask[]>([]);
+  const [isQueueActive, setIsQueueActive] = useState(false);
+  const [toastNotification, setToastNotification] = useState<string | null>(null);
+  const isWorkerRunning = useRef(false);
 
   // Background fetch to refresh data without blocking UI
   useEffect(() => {
@@ -136,6 +154,145 @@ export default function Home() {
     }
   };
 
+  // NON-BLOCKING BACKGROUND WORKER
+  const enqueueFilesForBackgroundDigitization = (files: File[]) => {
+    const newTasks: QueueTask[] = files.map((file, idx) => ({
+      id: `task-${Date.now()}-${idx}`,
+      name: file.name,
+      file,
+      status: "pending",
+      thumbnail: URL.createObjectURL(file),
+    }));
+
+    setQueueTasks((prev) => [...prev, ...newTasks]);
+    setToastNotification(`Queued ${files.length} piece(s) for background digitization!`);
+    setTimeout(() => setToastNotification(null), 3000);
+  };
+
+  const enqueueUrlForBackgroundDigitization = (url: string) => {
+    const newTask: QueueTask = {
+      id: `task-url-${Date.now()}`,
+      name: url.split("/").pop() || "Web Image",
+      url,
+      status: "pending",
+      thumbnail: url,
+    };
+    setQueueTasks((prev) => [...prev, newTask]);
+    setToastNotification("Queued web image for background digitization!");
+    setTimeout(() => setToastNotification(null), 3000);
+  };
+
+  // Process queue sequentially in the background without blocking the UI
+  useEffect(() => {
+    const processQueue = async () => {
+      if (isWorkerRunning.current) return;
+      const nextPending = queueTasks.find((t) => t.status === "pending");
+      if (!nextPending) {
+        if (queueTasks.length > 0 && queueTasks.every((t) => t.status === "completed" || t.status === "error")) {
+          // Finished all
+          confetti({ particleCount: 90, spread: 70, origin: { y: 0.6 } });
+          setToastNotification(`All ${queueTasks.length} garments successfully digitized & saved!`);
+          setTimeout(() => {
+            setQueueTasks([]);
+            setToastNotification(null);
+          }, 4500);
+        }
+        return;
+      }
+
+      isWorkerRunning.current = true;
+      setIsQueueActive(true);
+
+      // Mark as processing
+      setQueueTasks((prev) =>
+        prev.map((t) => (t.id === nextPending.id ? { ...t, status: "processing" } : t))
+      );
+
+      try {
+        let ingestRes;
+        if (nextPending.file) {
+          const formData = new FormData();
+          formData.append("file", nextPending.file);
+          ingestRes = await apiFetch("/api/v1/wardrobe/ingest", {
+            method: "POST",
+            body: formData,
+          });
+        } else if (nextPending.url) {
+          const formData = new FormData();
+          formData.append("image_url", nextPending.url);
+          ingestRes = await apiFetch("/api/v1/wardrobe/ingest-url", {
+            method: "POST",
+            body: formData,
+          });
+        }
+
+        if (ingestRes && ingestRes.ok) {
+          const data: IngestionResult = await ingestRes.json();
+
+          // Auto-commit into database
+          const payload = {
+            category: data.category,
+            sub_category: data.sub_category,
+            color_primary_hex: data.color_primary_hex,
+            color_secondary_hex: data.color_secondary_hex,
+            color_family: data.color_family,
+            fabric_type: data.fabric_type,
+            fabric_weight: data.fabric_weight,
+            pattern: data.pattern,
+            hardware_color: data.hardware_color,
+            thermal_rating: data.thermal_rating,
+            fit_type: data.fit_type,
+            image_original_url: data.original_url,
+            image_cutout_url: data.cutout_url,
+            embedding: [],
+            metadata_json: {
+              tags: data.tags,
+              confidence: data.confidence,
+              white_balance_applied: data.white_balance_applied,
+              bg_removed: data.bg_removed,
+            },
+          };
+
+          const saveRes = await apiFetch("/api/v1/wardrobe/items", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+
+          if (saveRes.ok) {
+            const savedItem: ClothingItem = await saveRes.json();
+            setItems((prev) => {
+              const updated = [savedItem, ...prev];
+              if (typeof window !== "undefined") {
+                localStorage.setItem("closetos_items_v2", JSON.stringify(updated));
+              }
+              return updated;
+            });
+          }
+
+          setQueueTasks((prev) =>
+            prev.map((t) => (t.id === nextPending.id ? { ...t, status: "completed" } : t))
+          );
+        } else {
+          setQueueTasks((prev) =>
+            prev.map((t) => (t.id === nextPending.id ? { ...t, status: "error" } : t))
+          );
+        }
+      } catch (err) {
+        console.error("Queue worker error:", err);
+        setQueueTasks((prev) =>
+          prev.map((t) => (t.id === nextPending.id ? { ...t, status: "error" } : t))
+        );
+      } finally {
+        isWorkerRunning.current = false;
+        setIsQueueActive(false);
+      }
+    };
+
+    const timer = setTimeout(processQueue, 300);
+    return () => clearTimeout(timer);
+  }, [queueTasks]);
+
   const handleGenerateOutfit = async (
     occasion: string,
     preferredHardware?: string,
@@ -165,7 +322,6 @@ export default function Home() {
     }
   };
 
-  // Generate outfit on initial load once items are loaded (or if cached)
   useEffect(() => {
     if (items.length >= 2 && !outfit) {
       handleGenerateOutfit("coding", "silver", "korean_minimal");
@@ -256,15 +412,14 @@ export default function Home() {
     setActiveTab("database");
   };
 
-  const handleStartBackgroundTask = (taskName: string) => {
-    setBackgroundStatus(taskName);
-    setTimeout(() => {
-      setBackgroundStatus(null);
-    }, 10000);
-  };
+  const completedTasks = queueTasks.filter((t) => t.status === "completed").length;
+  const backgroundSummary =
+    queueTasks.length > 0
+      ? `Digitizing ${completedTasks + 1}/${queueTasks.length} pieces in background`
+      : null;
 
   return (
-    <div className="min-h-screen bg-[#090a0f] text-neutral-100 flex flex-col font-sans selection:bg-white selection:text-black pb-20 md:pb-0">
+    <div className="min-h-screen bg-[#090a0f] text-neutral-100 flex flex-col font-sans selection:bg-white selection:text-black pb-24 lg:pb-0">
       {/* Background radial gradient glow */}
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.10),rgba(255,255,255,0))]" />
       <div className="fixed inset-0 pointer-events-none bg-grid-pattern opacity-30" />
@@ -276,14 +431,34 @@ export default function Home() {
         weather={weather}
         onOpenSchemaModal={() => setIsSchemaModalOpen(true)}
         onOpenShareModal={() => setIsShareModalOpen(true)}
-        backgroundStatus={backgroundStatus}
+        backgroundStatus={backgroundSummary}
       />
 
-      {/* Mobile Floating Background Task Indicator */}
-      {backgroundStatus && (
-        <div className="sm:hidden fixed top-20 right-4 z-40 px-3 py-1.5 rounded-full bg-amber-400 text-black text-[11px] font-bold flex items-center space-x-1.5 shadow-xl animate-bounce">
-          <RefreshCw className="h-3 w-3 animate-spin" />
-          <span className="truncate max-w-[200px]">{backgroundStatus}</span>
+      {/* FLOATING NON-BLOCKING BACKGROUND PROGRESS CAPSULE */}
+      {queueTasks.length > 0 && (
+        <div className="fixed bottom-20 lg:bottom-6 right-4 z-50 max-w-sm w-[90%] sm:w-auto bg-neutral-900/95 backdrop-blur-xl border border-amber-400/50 p-3 rounded-2xl shadow-2xl flex items-center space-x-3 animate-fade-in">
+          <div className="h-8 w-8 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center shrink-0">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          </div>
+          <div className="flex-1 min-w-0 text-xs">
+            <p className="font-bold text-white truncate">
+              Digitizing {completedTasks}/{queueTasks.length} in Background
+            </p>
+            <p className="text-[10px] text-neutral-400 truncate">
+              Auto-saving cutouts while you use other tabs.
+            </p>
+          </div>
+          <span className="text-[10px] font-mono font-bold text-amber-300">
+            {Math.round((completedTasks / queueTasks.length) * 100)}%
+          </span>
+        </div>
+      )}
+
+      {/* TOAST NOTIFICATION */}
+      {toastNotification && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-white text-black text-xs font-bold shadow-2xl flex items-center space-x-2 animate-bounce">
+          <Sparkles className="h-3.5 w-3.5" />
+          <span>{toastNotification}</span>
         </div>
       )}
 
@@ -309,7 +484,19 @@ export default function Home() {
           />
         )}
 
-        {/* 2. CLOSET DATABASE & MULTI-SELECT BUILDER TAB */}
+        {/* 2. OUTFIT CANVAS TAB (Polyvore-style Freeform Collage) */}
+        {activeTab === "canvas" && (
+          <OutfitCanvas
+            items={items}
+            onSaveOutfit={(newOutfit) => {
+              setOutfit(newOutfit);
+              setActiveTab("styling");
+            }}
+            onNavigateToStylist={() => setActiveTab("styling")}
+          />
+        )}
+
+        {/* 3. CLOSET DATABASE TAB */}
         {activeTab === "database" && (
           <ClosetDatabase
             items={items}
@@ -323,7 +510,20 @@ export default function Home() {
           />
         )}
 
-        {/* 3. AI STYLIST HELPER & RECOMMENDER TAB */}
+        {/* 4. PLAN & PACK TAB (Weekly Calendar & Trip Luggage Packer) */}
+        {activeTab === "planner" && (
+          <OutfitPlannerAndPacker
+            items={items}
+            outfit={outfit}
+            weather={weather}
+            onApplyOutfit={(newOutfit) => {
+              setOutfit(newOutfit);
+              setActiveTab("styling");
+            }}
+          />
+        )}
+
+        {/* 5. AI STYLIST HELPER & RECOMMENDER TAB */}
         {activeTab === "ai-chat" && (
           <AICoPilot
             bodyProfile={bodyProfile}
@@ -335,7 +535,7 @@ export default function Home() {
           />
         )}
 
-        {/* 4. FACE, SKIN & SUITING DNA STUDIO TAB */}
+        {/* 6. FACE, SKIN & SUITING DNA STUDIO TAB */}
         {activeTab === "face-skin" && (
           <FaceSkinStudio
             bodyProfile={bodyProfile}
@@ -344,21 +544,22 @@ export default function Home() {
           />
         )}
 
-        {/* 5. DIGITIZER (ADD PIECE WITH CAMERA & BATCH UPLOAD) TAB */}
+        {/* 7. DIGITIZER (ADD PIECE WITH CAMERA, BATCH UPLOAD & WEB CLIP) TAB */}
         {activeTab === "digitizer" && (
           <WardrobeDigitizer
             onItemIngested={handleItemIngested}
             onNavigateToVault={() => setActiveTab("database")}
-            onStartBackgroundTask={handleStartBackgroundTask}
+            onEnqueueFiles={enqueueFilesForBackgroundDigitization}
+            onEnqueueUrl={enqueueUrlForBackgroundDigitization}
           />
         )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-white/5 py-5 text-center text-xs text-neutral-500 bg-black/40 hidden md:block">
+      <footer className="border-t border-white/5 py-5 text-center text-xs text-neutral-500 bg-black/40 hidden lg:block">
         <p>ClosetOS — AI Wardrobe Architecture & Proportion Reasoning Engine</p>
         <p className="text-[11px] text-neutral-600 mt-1">
-          OpenCV Auto-White-Balance • Morphological Facial Alignment • Suiting Drop & 1:2 Golden Ratio
+          Polyvore Collage Canvas • Weekly Outfit Planner • Trip Luggage Packer • OpenCV Auto-White-Balance • 1:2 Golden Ratio
         </p>
       </footer>
 

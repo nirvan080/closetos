@@ -9,7 +9,9 @@ import {
   CloudSun,
   Share2,
   MessageSquare,
-  RefreshCw
+  RefreshCw,
+  Palette,
+  Calendar as CalendarIcon
 } from "lucide-react";
 import { WeatherCondition } from "@/types";
 
@@ -32,9 +34,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const tabs = [
     { id: "styling", label: "Stylist", icon: Sparkles },
+    { id: "canvas", label: "Canvas", icon: Palette },
     { id: "database", label: "Database", icon: Layers },
+    { id: "planner", label: "Plan & Pack", icon: CalendarIcon },
     { id: "ai-chat", label: "AI Helper", icon: MessageSquare },
-    { id: "face-skin", label: "Face & Suit DNA", icon: Smile },
+    { id: "face-skin", label: "Face & Suit", icon: Smile },
     { id: "digitizer", label: "Add Piece", icon: PlusCircle },
   ];
 
@@ -54,7 +58,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   CLOSET<span className="text-amber-400">OS</span>
                 </span>
                 <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-bold tracking-widest uppercase text-neutral-300">
-                  AI PROPORTION
+                  AI ENGINE
                 </span>
               </div>
               <p className="text-[10px] text-neutral-400 font-medium">
@@ -64,7 +68,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
 
           {/* Desktop Nav Pills */}
-          <nav className="hidden md:flex items-center space-x-1 bg-white/[0.03] p-1.5 rounded-2xl border border-white/5">
+          <nav className="hidden lg:flex items-center space-x-1 bg-white/[0.03] p-1.5 rounded-2xl border border-white/5">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -72,13 +76,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                     isActive
                       ? "bg-white text-black shadow-md scale-[1.02]"
                       : "text-neutral-400 hover:text-white hover:bg-white/5"
                   }`}
                 >
-                  <Icon className={`h-4 w-4 ${isActive ? "text-black" : "text-neutral-400"}`} />
+                  <Icon className={`h-3.5 w-3.5 ${isActive ? "text-black" : "text-neutral-400"}`} />
                   <span>{tab.label}</span>
                 </button>
               );
@@ -88,9 +92,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Right Header Status Widget */}
           <div className="flex items-center space-x-2.5">
             {backgroundStatus && (
-              <div className="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-semibold animate-pulse">
+              <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-semibold animate-pulse">
                 <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                <span className="truncate max-w-[150px]">{backgroundStatus}</span>
+                <span className="truncate max-w-[140px] hidden sm:inline">{backgroundStatus}</span>
               </div>
             )}
 
@@ -115,8 +119,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </header>
 
-      {/* Mobile Bottom Navigation Bar (Super sleek native app feel) */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#090a0f]/95 backdrop-blur-2xl border-t border-white/10 px-2 py-2 flex items-center justify-around shadow-2xl">
+      {/* Mobile Bottom Navigation Bar (Smooth Horizontal Scroll for 7 Features) */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#090a0f]/95 backdrop-blur-2xl border-t border-white/10 px-2 py-1.5 flex items-center justify-between overflow-x-auto scrollbar-none shadow-2xl">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -124,14 +128,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition-all ${
+              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl shrink-0 transition-all ${
                 isActive ? "text-white font-bold" : "text-neutral-500 hover:text-neutral-300"
               }`}
             >
               <div className={`p-1.5 rounded-xl transition-all ${isActive ? "bg-white text-black shadow-md" : "text-neutral-400"}`}>
                 <Icon className="h-4 w-4" />
               </div>
-              <span className={`text-[9px] mt-1 ${isActive ? "text-white font-bold" : "text-neutral-500"}`}>
+              <span className={`text-[9px] mt-0.5 whitespace-nowrap ${isActive ? "text-white font-bold" : "text-neutral-500"}`}>
                 {tab.label}
               </span>
             </button>

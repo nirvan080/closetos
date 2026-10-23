@@ -101,6 +101,71 @@ async def ingest_garment(file: UploadFile = File(...)):
         cutout_url=cutout_url
     )
 
+@router.post("/ingest-url", response_model=IngestionAnalysisResult)
+async def ingest_garment_from_url(image_url: str = Form(...)):
+    """
+    Ingests garment from an image URL (Clip from Web inspired by Fits App):
+    1. Fetches remote image via HTTP.
+    2. Runs EXIF normalization & Gray World Auto-White-Balance.
+    3. Isolates transparent alpha PNG cutout.
+    4. Extracts K-Means dominant HEX and specular hardware.
+    5. Tags metadata via Gemini Vision.
+    """
+    import httpx
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(image_url, timeout=20.0, follow_redirects=True)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=400, detail=f"Failed to fetch image from URL: HTTP {resp.status_code}")
+            content = resp.content
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Network error fetching URL: {e}")
+
+    try:
+        raw_pil = Image.open(io.BytesIO(content))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid image format: {e}")
+
+    norm_pil = exif_normalize(raw_pil)
+    awb_pil = auto_white_balance(norm_pil)
+
+    file_id = str(uuid.uuid4())
+    orig_filename = f"{file_id}_awb.jpg"
+    orig_path = settings.UPLOAD_DIR / "originals" / orig_filename
+    awb_pil.convert("RGB").save(orig_path, "JPEG", quality=90)
+    original_url = f"{settings.STATIC_UPLOADS_URL}/originals/{orig_filename}"
+
+    cutout_pil = remove_background(awb_pil)
+    cutout_filename = f"{file_id}_cutout.png"
+    cutout_path = settings.UPLOAD_DIR / "cutouts" / cutout_filename
+    cutout_pil.save(cutout_path, "PNG")
+    cutout_url = f"{settings.STATIC_UPLOADS_URL}/cutouts/{cutout_filename}"
+
+    prim_hex, sec_hex, color_family, palette = extract_dominant_colors(cutout_pil, k=5)
+    hw_tone = detect_hardware_tone(cutout_pil)
+    tag_result = await tag_garment_with_gemini(awb_pil, prim_hex, color_family, hw_tone)
+
+    return IngestionAnalysisResult(
+        category=tag_result.get("category", "top"),
+        sub_category=tag_result.get("sub_category", "clothing_item"),
+        color_primary_hex=prim_hex,
+        color_secondary_hex=sec_hex,
+        color_family=color_family,
+        color_palette=palette,
+        fabric_type=tag_result.get("fabric_type", "cotton"),
+        fabric_weight=tag_result.get("fabric_weight", "medium_weight"),
+        pattern=tag_result.get("pattern", "solid"),
+        hardware_color=tag_result.get("hardware_color", hw_tone),
+        thermal_rating=tag_result.get("thermal_rating", 2),
+        fit_type=tag_result.get("fit_type", "relaxed"),
+        confidence=0.95,
+        tags=tag_result.get("tags", []),
+        white_balance_applied=True,
+        bg_removed=True,
+        original_url=original_url,
+        cutout_url=cutout_url
+    )
+
 @router.post("/confirm", response_model=ClothingItemResponse)
 async def confirm_garment(item: ClothingItemCreate):
     """

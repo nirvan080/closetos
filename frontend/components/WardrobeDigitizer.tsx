@@ -17,7 +17,9 @@ import {
   Layers,
   ArrowRight,
   Check,
-  Plus
+  Plus,
+  Link,
+  Globe
 } from "lucide-react";
 import { IngestionResult, ClothingItem } from "@/types";
 import { apiFetch } from "@/lib/api";
@@ -26,16 +28,20 @@ interface WardrobeDigitizerProps {
   onItemIngested: (newItem: ClothingItem) => void;
   onNavigateToVault: () => void;
   onStartBackgroundTask?: (name: string) => void;
+  onEnqueueFiles?: (files: File[]) => void;
+  onEnqueueUrl?: (url: string) => void;
 }
 
 export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
   onItemIngested,
   onNavigateToVault,
   onStartBackgroundTask,
+  onEnqueueFiles,
+  onEnqueueUrl,
 }) => {
-  // Single or multiple file states
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [webUrl, setWebUrl] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; currentName: string } | null>(null);
   const [analysisResult, setAnalysisResult] = useState<IngestionResult | null>(null);
@@ -65,7 +71,52 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
     setSuccessCount(0);
   };
 
-  // Process a single garment with manual review
+  // Dispatch to background queue so the user is NEVER blocked
+  const handleQueueInBackground = () => {
+    if (selectedFiles.length > 0 && onEnqueueFiles) {
+      onEnqueueFiles(selectedFiles);
+      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+      setSelectedFiles([]);
+      setPreviewUrls([]);
+      return;
+    }
+    // Fallback to local background processing
+    handleProcessBatch();
+  };
+
+  const handleClipFromWeb = async () => {
+    if (!webUrl.trim()) return;
+    if (onEnqueueUrl) {
+      onEnqueueUrl(webUrl.trim());
+      setWebUrl("");
+      confetti({ particleCount: 60, spread: 50, origin: { y: 0.6 } });
+      return;
+    }
+
+    setIsProcessing(true);
+    setErrorMsg(null);
+    try {
+      const formData = new FormData();
+      formData.append("image_url", webUrl.trim());
+      const res = await apiFetch("/api/v1/wardrobe/ingest-url", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Could not clip garment from URL");
+      const data: IngestionResult = await res.json();
+      setAnalysisResult(data);
+      setCategory(data.category);
+      setSubCategory(data.sub_category);
+      setWebUrl("");
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to clip from web.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // Process a single garment
   const handleProcessSingleImage = async () => {
     if (selectedFiles.length === 0) return;
     const file = selectedFiles[0];
@@ -131,7 +182,6 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
         if (res.ok) {
           const data: IngestionResult = await res.json();
 
-          // Auto-commit item
           const payload = {
             category: data.category,
             sub_category: data.sub_category,
@@ -176,12 +226,7 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
     setBatchProgress(null);
     setSuccessCount(completed);
 
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-    });
-
+    confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
     setSelectedFiles([]);
     setPreviewUrls([]);
   };
@@ -225,12 +270,7 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
       const newItem: ClothingItem = await res.json();
       onItemIngested(newItem);
 
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
-      });
-
+      confetti({ particleCount: 80, spread: 70, origin: { y: 0.6 } });
       setSelectedFiles([]);
       setPreviewUrls([]);
       setAnalysisResult(null);
@@ -273,7 +313,7 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
             </h2>
           </div>
           <p className="text-xs text-neutral-400 mt-1">
-            Snap clothing with camera or upload multiple photos. Runs OpenCV Auto-White Balance, transparent cutout isolation, and AI tag extraction in the background.
+            Snap clothing with camera, upload multiple batch photos, or clip directly from web. Runs non-blocking background cutout & auto-white-balance.
           </p>
         </div>
 
@@ -310,7 +350,7 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
         </div>
       )}
 
-      {/* UPLOAD / CAMERA SELECTION ZONE (When no single item is being reviewed) */}
+      {/* 3 WAYS TO DIGITIZE (When no single item is being reviewed) */}
       {!analysisResult && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -344,7 +384,7 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
               <div>
                 <h3 className="text-sm font-bold text-white">Select Single or Multiple Pieces</h3>
                 <p className="text-xs text-neutral-400 mt-0.5">
-                  Pick 1, 5, or 10 garment photos from gallery for batch ingestion
+                  Pick 1, 5, or 10 garment photos from gallery for background ingestion
                 </p>
               </div>
               <span className="px-3 py-1 rounded-full bg-white/10 text-neutral-300 text-[10px] font-bold">
@@ -353,7 +393,34 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
             </div>
           </div>
 
-          {/* PREVIEW OF SELECTED FILES */}
+          {/* 3. Clip From Web (Inspired by Fits App) */}
+          <div className="glass-card rounded-3xl p-5 border border-white/10 space-y-3">
+            <div className="flex items-center space-x-2 text-xs font-bold text-white uppercase tracking-wider">
+              <Globe className="h-4 w-4 text-sky-400" />
+              <span>Clip from Web (Fits Feature)</span>
+            </div>
+            <p className="text-xs text-neutral-400">
+              Paste any clothing image link from Zara, Uniqlo, H&M, or Pinterest to isolate cutouts without downloading to your camera roll.
+            </p>
+            <div className="flex items-center space-x-2">
+              <input
+                type="url"
+                placeholder="Paste image URL (e.g. https://...garment.jpg)..."
+                value={webUrl}
+                onChange={(e) => setWebUrl(e.target.value)}
+                className="flex-1 rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-white/30"
+              />
+              <button
+                onClick={handleClipFromWeb}
+                disabled={isProcessing || !webUrl.trim()}
+                className="px-4 py-2 rounded-xl bg-white text-black font-bold text-xs hover:bg-neutral-200 disabled:opacity-40 transition-all shadow"
+              >
+                Clip to Closet
+              </button>
+            </div>
+          </div>
+
+          {/* PREVIEW OF SELECTED FILES & NON-BLOCKING BACKGROUND DISPATCH */}
           {selectedFiles.length > 0 && (
             <div className="glass-card rounded-3xl p-6 border border-white/10 space-y-4 animate-fade-in">
               <div className="flex items-center justify-between">
@@ -362,9 +429,7 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
                     {selectedFiles.length} Garment Photo(s) Selected
                   </h3>
                   <p className="text-xs text-neutral-400">
-                    {selectedFiles.length === 1
-                      ? "Ready for AI cutout isolation and tag verification."
-                      : "Ready to batch digitize sequentially in the background."}
+                    Process in background so you can freely browse outfits while computer vision runs.
                   </p>
                 </div>
                 <button
@@ -393,56 +458,23 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
                 ))}
               </div>
 
-              {/* Action Buttons */}
+              {/* Actions */}
               <div className="flex items-center justify-end space-x-3 pt-2">
-                {selectedFiles.length === 1 ? (
-                  <button
-                    onClick={handleProcessSingleImage}
-                    disabled={isProcessing}
-                    className="flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-white text-black font-bold text-xs hover:bg-neutral-200 transition-all shadow-md active:scale-95 disabled:opacity-50"
-                  >
-                    {isProcessing ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                        <span>Isolating Cutout...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4 text-black" />
-                        <span>Process & Review Piece</span>
-                      </>
-                    )}
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleProcessBatch}
-                    disabled={isProcessing}
-                    className="flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-amber-400 text-black font-bold text-xs hover:bg-amber-300 transition-all shadow-md active:scale-95 disabled:opacity-50"
-                  >
-                    {isProcessing ? (
-                      <>
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                        <span>
-                          {batchProgress
-                            ? `Digitizing ${batchProgress.current}/${batchProgress.total}...`
-                            : "Batch Digitizing..."}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="h-4 w-4 text-black" />
-                        <span>Digitize All {selectedFiles.length} Pieces</span>
-                      </>
-                    )}
-                  </button>
-                )}
+                <button
+                  onClick={handleQueueInBackground}
+                  disabled={isProcessing}
+                  className="flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-amber-400 text-black font-bold text-xs hover:bg-amber-300 transition-all shadow-md active:scale-95 disabled:opacity-50"
+                >
+                  <Sparkles className="h-4 w-4 text-black" />
+                  <span>Process in Background & Continue</span>
+                </button>
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* SINGLE ITEM REVIEW & EDIT CARD (Shows when 1 item is analyzed) */}
+      {/* SINGLE ITEM REVIEW & EDIT CARD */}
       {analysisResult && (
         <div className="glass-card rounded-3xl p-6 border border-white/10 space-y-6 animate-fade-in">
           <div className="flex flex-col sm:flex-row items-center gap-6">
@@ -496,7 +528,6 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
             </div>
           </div>
 
-          {/* Form Fields */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
             <div className="space-y-1">
               <label className="text-neutral-400 font-medium">Category</label>
@@ -563,7 +594,7 @@ export const WardrobeDigitizer: React.FC<WardrobeDigitizerProps> = ({
               className="flex items-center space-x-2 px-6 py-2.5 rounded-xl bg-white text-black font-bold text-xs hover:bg-neutral-200 transition-all shadow-md active:scale-95 disabled:opacity-50"
             >
               <Check className="h-4 w-4" />
-              <span>{isSaving ? "Saving to Vault..." : "Confirm & Save to Closet"}</span>
+              <span>{isSaving ? "Saving..." : "Confirm & Save to Closet"}</span>
             </button>
           </div>
         </div>
